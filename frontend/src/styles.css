@@ -1976,6 +1976,36 @@ dd {
   font-weight: 750;
 }
 
+.candidate-selection {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  margin: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.candidate-selection input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--accent-strong);
+}
+
+.candidate-selection:has(input:checked) {
+  box-shadow: inset 0 0 0 2px var(--accent-strong);
+}
+
+.candidate-selection input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
 .candidate-parameter-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2073,6 +2103,91 @@ dd {
   margin-top: var(--space-1);
   color: var(--surface);
   text-align: left;
+}
+
+.confirmation-panel,
+.confirmed-plan {
+  min-width: 0;
+  margin-top: var(--space-5);
+  padding: var(--space-5);
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+}
+
+.confirmation-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.confirmation-panel h3,
+.confirmed-plan h3 {
+  margin: var(--space-1) 0 var(--space-2);
+}
+
+.confirmation-selection-summary,
+.confirmation-disclaimer {
+  margin: var(--space-3) 0 0;
+  color: var(--text-muted);
+}
+
+.confirmation-progress,
+.confirmation-error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.confirmation-progress {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  color: var(--accent-strong);
+}
+
+.confirmed-plan-valid {
+  border-color: var(--accent);
+}
+
+.confirmed-plan-stale {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.confirmed-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+.confirmed-plan-grid dl {
+  min-width: 0;
+  margin: var(--space-3) 0 0;
+}
+
+.confirmed-plan-grid div {
+  display: grid;
+  grid-template-columns: minmax(6rem, 0.35fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: var(--border-subtle);
+}
+
+.confirmed-plan-grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+}
+
+.stale-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
 }
 
 .parameter-planning-section button:focus-visible,
@@ -2198,8 +2313,14 @@ dd {
   .parameter-planning-intro,
   .direction-evidence-grid,
   .candidate-parameter-grid,
+  .confirmation-panel,
+  .confirmed-plan-grid,
   .planning-version-grid {
     grid-template-columns: 1fr;
+  }
+
+  .confirmation-action {
+    width: 100%;
   }
 
   .planning-status,

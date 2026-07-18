@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import {
   AnomalyDetectionResult,
   CaseRetrievalResult,
+  confirmParameterPlan,
+  ConfirmedPlan,
   createInitialTask,
   generateParameterPlans,
   importPresetAsset,
@@ -59,6 +61,31 @@ type ParameterPlanningState =
   | { kind: "loading" }
   | { kind: "success"; result: ParameterPlanningResult }
   | { kind: "error"; code: string; message: string };
+
+type PlanConfirmationState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "success"; plan: ConfirmedPlan }
+  | { kind: "error"; code: string; message: string };
+
+const candidateTerminalConfirmationCodes = new Set([
+  "CANDIDATE_STALE",
+  "CANDIDATE_HASH_MISMATCH",
+  "CANDIDATE_NOT_CURRENT",
+  "CANDIDATE_NOT_PASSED",
+  "SAFETY_REVALIDATION_FAILED",
+]);
+
+const contextTerminalConfirmationCodes = new Set([
+  "PLANNING_RESULT_STALE",
+  "CURRENT_PARAMETER_MISMATCH",
+  "SNAPSHOT_VERSION_MISMATCH",
+  "CONTROL_LIMIT_SNAPSHOT_CHANGED",
+  "PARAMETER_CONSTRAINT_SNAPSHOT_CHANGED",
+  "RULE_VERSION_CHANGED",
+  "RETRIEVAL_VERSION_CHANGED",
+  "CONFIRMED_PLAN_CONFLICT",
+]);
 
 const detectionCopy: Record<
   AnomalyDetectionResult["anomaly_result"],
@@ -479,7 +506,27 @@ function CaseRetrievalResultView({ result }: { result: CaseRetrievalResult }) {
   );
 }
 
-function ParameterPlanningResultView({ result }: { result: ParameterPlanningResult }) {
+function ParameterPlanningResultView({
+  result,
+  actor,
+  selectedCandidateId,
+  onSelectCandidate,
+  onConfirm,
+  confirmationState,
+  confirmedPlan,
+  invalidCandidateIds,
+  confirmationContextInvalid,
+}: {
+  result: ParameterPlanningResult;
+  actor: Task["actor"];
+  selectedCandidateId: string | null;
+  onSelectCandidate: (candidateId: string) => void;
+  onConfirm: () => void;
+  confirmationState: PlanConfirmationState;
+  confirmedPlan?: ConfirmedPlan | null;
+  invalidCandidateIds: ReadonlySet<string>;
+  confirmationContextInvalid: boolean;
+}) {
   const constraints = Object.fromEntries(
     result.parameter_constraints.map((constraint) => [constraint.parameter_name, constraint]),
   );
@@ -544,7 +591,9 @@ function ParameterPlanningResultView({ result }: { result: ParameterPlanningResu
       {result.ordered_candidates.length > 0 && (
         <section className="planning-candidates" aria-labelledby="planning-candidates-title">
           <h3 id="planning-candidates-title">通过当前证据和安全规则生成的候选方案</h3>
-          <p className="planning-readonly-note">候选仅供查看；本阶段不提供采纳或设备应用操作。</p>
+          <p className="planning-readonly-note">
+            候选参数为服务端只读内容；请选择一组 PASSED 候选进行人工确认。
+          </p>
           <ol className="planning-candidate-list">
             {result.ordered_candidates.map((candidate, index) => {
               const changedParameters = Object.keys(candidate.delta_ticks);
@@ -563,6 +612,29 @@ function ParameterPlanningResultView({ result }: { result: ParameterPlanningResu
                     <span>{candidate.total_absolute_delta_ticks} total ticks</span>
                     <span>支持案例 {candidate.supporting_case_count}</span>
                   </header>
+
+                  {!confirmedPlan && (
+                    <label className="candidate-selection">
+                      <input
+                        type="radio"
+                        name="parameter-plan-candidate"
+                        value={candidate.candidate_id}
+                        checked={selectedCandidateId === candidate.candidate_id}
+                        disabled={
+                          candidate.validation_status !== "PASSED" ||
+                          confirmationContextInvalid ||
+                          invalidCandidateIds.has(candidate.candidate_id) ||
+                          confirmationState.kind === "loading"
+                        }
+                        onChange={() => onSelectCandidate(candidate.candidate_id)}
+                      />
+                      <span>
+                        {invalidCandidateIds.has(candidate.candidate_id)
+                          ? "该候选已失效"
+                          : `选择 ${candidate.generation_type} 候选`}
+                      </span>
+                    </label>
+                  )}
 
                   <div className="candidate-parameter-grid">
                     {changedParameters.map((parameterName) => {
@@ -615,6 +687,106 @@ function ParameterPlanningResultView({ result }: { result: ParameterPlanningResu
               );
             })}
           </ol>
+
+          {!confirmedPlan && (
+            <section
+              className="confirmation-panel"
+              aria-labelledby="confirmation-title"
+              aria-live="polite"
+            >
+              <div>
+                <p className="section-kicker">固定身份 · 显式人工动作</p>
+                <h3 id="confirmation-title">人工确认候选方案</h3>
+                <p>
+                  确认身份：{actor.display_name} · {actor.actor_role}
+                </p>
+                {selectedCandidateId ? (
+                  <p className="confirmation-selection-summary">
+                    已选择 {selectedCandidateId}
+                  </p>
+                ) : (
+                  <p className="confirmation-selection-summary">请先选择一组 PASSED 候选。</p>
+                )}
+              </div>
+              <button
+                className="primary-action confirmation-action"
+                type="button"
+                disabled={
+                  confirmationContextInvalid ||
+                  !selectedCandidateId ||
+                  confirmationState.kind === "loading"
+                }
+                onClick={onConfirm}
+              >
+                人工确认候选方案
+              </button>
+              {confirmationState.kind === "loading" && (
+                <div className="confirmation-progress" role="status">
+                  <span className="inline-loader" />
+                  <span>正在冻结候选并执行服务端安全复核…</span>
+                </div>
+              )}
+              {confirmationState.kind === "error" && (
+                <div className="inline-error confirmation-error" role="alert">
+                  <div>
+                    <strong>人工确认已拒绝</strong>
+                    <p>{confirmationState.message}</p>
+                  </div>
+                  <code>{confirmationState.code}</code>
+                </div>
+              )}
+            </section>
+          )}
+        </section>
+      )}
+
+      {confirmedPlan && (
+        <section
+          className={`confirmed-plan confirmed-plan-${confirmedPlan.status.toLowerCase()}`}
+          aria-labelledby="confirmed-plan-title"
+          aria-live="polite"
+        >
+          {confirmedPlan.status === "STALE" ? (
+            <>
+              <p className="section-kicker">STALE · 不可用于未来回放</p>
+              <h3 id="confirmed-plan-title">方案已过期，需要重新生成并确认</h3>
+              <ul className="stale-reasons">
+                {confirmedPlan.stale_reason_codes.map((reason) => (
+                  <li key={reason}><code>{reason}</code></li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <>
+              <p className="section-kicker">VALID · 不可变 ConfirmedPlan</p>
+              <h3 id="confirmed-plan-title">方案已人工确认并冻结</h3>
+              <div className="confirmed-plan-grid">
+                <dl>
+                  <div><dt>候选</dt><dd>{confirmedPlan.candidate_id}</dd></div>
+                  <div><dt>参数族</dt><dd>{confirmedPlan.parameter_family}</dd></div>
+                  <div><dt>生成类型</dt><dd>{confirmedPlan.generation_type}</dd></div>
+                </dl>
+                <dl>
+                  <div>
+                    <dt>确认身份</dt>
+                    <dd>
+                      {confirmedPlan.display_name} · {confirmedPlan.actor_id} · {confirmedPlan.actor_role}
+                    </dd>
+                  </div>
+                  <div><dt>确认时间</dt><dd>{confirmedPlan.confirmed_at}</dd></div>
+                  <div>
+                    <dt>确认方案哈希</dt>
+                    <dd title={confirmedPlan.confirmed_plan_hash}>
+                      {confirmedPlan.confirmed_plan_hash.slice(0, 16)}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+              <p className="confirmation-disclaimer">
+                此操作只冻结离线候选方案；尚未进行模拟回放；未向真实设备写入任何参数。
+              </p>
+            </>
+          )}
         </section>
       )}
 
@@ -652,6 +824,14 @@ function App() {
   });
   const [parameterPlanningState, setParameterPlanningState] =
     useState<ParameterPlanningState>({ kind: "idle" });
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  const [invalidCandidateIds, setInvalidCandidateIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [confirmationContextInvalid, setConfirmationContextInvalid] =
+    useState(false);
+  const [confirmationState, setConfirmationState] =
+    useState<PlanConfirmationState>({ kind: "idle" });
 
   useEffect(() => {
     let active = true;
@@ -713,6 +893,10 @@ function App() {
       setDiagnosisState({ kind: "idle" });
       setCaseRetrievalState({ kind: "idle" });
       setParameterPlanningState({ kind: "idle" });
+      setSelectedCandidateId(null);
+      setInvalidCandidateIds(new Set());
+      setConfirmationContextInvalid(false);
+      setConfirmationState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setImportState({ kind: "error", code: error.code, message: error.message });
@@ -738,6 +922,10 @@ function App() {
       setDiagnosisState({ kind: "idle" });
       setCaseRetrievalState({ kind: "idle" });
       setParameterPlanningState({ kind: "idle" });
+      setSelectedCandidateId(null);
+      setInvalidCandidateIds(new Set());
+      setConfirmationContextInvalid(false);
+      setConfirmationState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setDetectionState({
@@ -767,6 +955,10 @@ function App() {
       setDiagnosisState({ kind: "idle" });
       setCaseRetrievalState({ kind: "idle" });
       setParameterPlanningState({ kind: "idle" });
+      setSelectedCandidateId(null);
+      setInvalidCandidateIds(new Set());
+      setConfirmationContextInvalid(false);
+      setConfirmationState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setDiagnosisState({ kind: "error", code: error.code, message: error.message });
@@ -819,6 +1011,10 @@ function App() {
       );
       setState({ kind: "ready", task: response.task });
       setParameterPlanningState({ kind: "success", result: response.planning });
+      setSelectedCandidateId(null);
+      setInvalidCandidateIds(new Set());
+      setConfirmationContextInvalid(false);
+      setConfirmationState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setParameterPlanningState({
@@ -832,6 +1028,56 @@ function App() {
         kind: "error",
         code: "PARAMETER_PLANNING_FAILED",
         message: "本地参数规划服务暂时不可用。",
+      });
+    }
+  }
+
+  async function handlePlanConfirmation() {
+    const planning =
+      parameterPlanningState.kind === "success"
+        ? parameterPlanningState.result
+        : task.parameter_planning_result;
+    if (!planning || !selectedCandidateId || task.confirmed_plan) return;
+    const candidate = planning.ordered_candidates.find(
+      (item) =>
+        item.candidate_id === selectedCandidateId &&
+        item.validation_status === "PASSED",
+    );
+    if (!candidate) return;
+    setConfirmationState({ kind: "loading" });
+    try {
+      const response = await confirmParameterPlan(
+        task.task_id,
+        candidate.candidate_id,
+        candidate.candidate_hash,
+      );
+      setState({ kind: "ready", task: response.task });
+      setConfirmationState({ kind: "success", plan: response.confirmed_plan });
+    } catch (error: unknown) {
+      if (error instanceof TaskCreationError) {
+        if (candidateTerminalConfirmationCodes.has(error.code)) {
+          setInvalidCandidateIds((current) => {
+            const next = new Set(current);
+            next.add(candidate.candidate_id);
+            return next;
+          });
+          setSelectedCandidateId(null);
+        }
+        if (contextTerminalConfirmationCodes.has(error.code)) {
+          setConfirmationContextInvalid(true);
+          setSelectedCandidateId(null);
+        }
+        setConfirmationState({
+          kind: "error",
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      setConfirmationState({
+        kind: "error",
+        code: "PLAN_CONFIRMATION_FAILED",
+        message: "本地人工确认服务暂时不可用。",
       });
     }
   }
@@ -1185,6 +1431,17 @@ function App() {
                           ? parameterPlanningState.result
                           : task.parameter_planning_result as ParameterPlanningResult
                       }
+                      actor={task.actor}
+                      selectedCandidateId={selectedCandidateId}
+                      onSelectCandidate={(candidateId) => {
+                        setSelectedCandidateId(candidateId);
+                        setConfirmationState({ kind: "idle" });
+                      }}
+                      onConfirm={handlePlanConfirmation}
+                      confirmationState={confirmationState}
+                      confirmedPlan={task.confirmed_plan}
+                      invalidCandidateIds={invalidCandidateIds}
+                      confirmationContextInvalid={confirmationContextInvalid}
                     />
                   )}
                 </section>

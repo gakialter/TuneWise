@@ -68,8 +68,9 @@ def test_runtime_source_has_no_network_simulator_or_isolated_asset_dependency():
         "re",
         "sqlite3",
         "statistics",
-        "typing",
-    }
+            "typing",
+            "uuid",
+        }
     assert not {
         token
         for token in (

@@ -4,6 +4,8 @@ import json
 import sqlite3
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import hashlib
+from typing import Callable
 
 from .domain import (
     Actor,
@@ -25,7 +27,10 @@ from .detection import (
 )
 from .diagnosis import DiagnosticResultRecord, deserialize_diagnostic_result
 from .case_retrieval import (
+    CASE_RETRIEVAL_RESULT_VERSION,
+    RETRIEVAL_RULE_VERSION,
     CaseRetrievalResultRecord,
+    CaseRetrievalGuardError,
     deserialize_case_retrieval_result,
 )
 from .parameter_planning import (
@@ -33,6 +38,12 @@ from .parameter_planning import (
     ParameterPlanningRefusalRecord,
     ParameterPlanningResultRecord,
     deserialize_parameter_planning_result,
+)
+from .plan_confirmation import (
+    AuditEvent,
+    ConfirmedPlan,
+    PlanConfirmationGuardError,
+    deserialize_confirmed_plan,
 )
 
 
@@ -56,6 +67,37 @@ class ParameterPlanningResultConflictError(RuntimeError):
     pass
 
 
+class ConfirmedPlanConflictError(RuntimeError):
+    pass
+
+
+class ConfirmationStateChangedError(ConfirmedPlanConflictError):
+    pass
+
+
+def _canonical_sha256(payload: object) -> str:
+    content = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(content).hexdigest()
+
+
+def _confirmation_safe_retrieval_payload(payload: dict) -> dict:
+    safe_payload = dict(payload)
+    safe_payload["ordered_cases"] = [
+        {
+            key: value
+            for key, value in item.items()
+            if key != "historical_simulated_result"
+        }
+        for item in payload.get("ordered_cases", [])
+    ]
+    return safe_payload
+
+
 @dataclass(frozen=True, slots=True)
 class StoredDetectionInput:
     manifest: dict | None
@@ -74,6 +116,25 @@ class StoredPlanningInput:
     parameter_constraints: dict | None
 
 
+@dataclass(frozen=True, slots=True)
+class StoredCaseRetrievalBinding:
+    retrieval_result_version: str
+    retrieval_result_id: str
+    task_id: str
+    diagnostic_result_id: str
+    case_index_version: str
+    case_index_hash: str
+    scaler_version: str
+    feature_definition_version: str
+    compatibility_rule_version: str
+    retrieval_rule_version: str
+    input_hash: str
+    result_hash: str
+    safe_payload_hash: str
+    ordered_case_ids: tuple[str, ...]
+    case_content_hashes: dict[str, str]
+
+
 class TaskStore:
     def __init__(self, database_path: Path) -> None:
         self._database_path = database_path
@@ -84,6 +145,51 @@ class TaskStore:
         connection = sqlite3.connect(self._database_path)
         connection.row_factory = sqlite3.Row
         return connection
+
+    @staticmethod
+    def _backfill_case_retrieval_confirmation_hashes(
+        connection: sqlite3.Connection,
+    ) -> None:
+        rows = connection.execute(
+            "SELECT retrieval_result_id, hex(CAST(payload_json AS BLOB)) AS payload_hex "
+            "FROM case_retrieval_results "
+            "WHERE payload_hash IS NULL OR safe_payload_hash IS NULL"
+        ).fetchall()
+        for row in rows:
+            try:
+                safe_top_row = connection.execute(
+                    "SELECT json_remove(payload_json, '$.ordered_cases') "
+                    "AS safe_top_json FROM case_retrieval_results "
+                    "WHERE retrieval_result_id = ?",
+                    (row["retrieval_result_id"],),
+                ).fetchone()
+                case_rows = connection.execute(
+                    "SELECT json_remove(value, '$.historical_simulated_result') "
+                    "AS safe_case_json FROM case_retrieval_results, "
+                    "json_each(payload_json, '$.ordered_cases') "
+                    "WHERE retrieval_result_id = ? "
+                    "ORDER BY CAST(json_extract(value, '$.rank') AS INTEGER)",
+                    (row["retrieval_result_id"],),
+                ).fetchall()
+                safe_payload = json.loads(safe_top_row["safe_top_json"])
+                safe_payload["ordered_cases"] = [
+                    json.loads(case["safe_case_json"]) for case in case_rows
+                ]
+                payload_hash = hashlib.sha256(
+                    bytes.fromhex(row["payload_hex"])
+                ).hexdigest()
+                safe_payload_hash = _canonical_sha256(safe_payload)
+            except (sqlite3.Error, json.JSONDecodeError, TypeError, ValueError):
+                continue
+            connection.execute(
+                "UPDATE case_retrieval_results SET payload_hash = ?, "
+                "safe_payload_hash = ? WHERE retrieval_result_id = ?",
+                (
+                    payload_hash,
+                    safe_payload_hash,
+                    row["retrieval_result_id"],
+                ),
+            )
 
     def _initialize(self) -> None:
         with self._connect() as connection:
@@ -142,9 +248,22 @@ class TaskStore:
                 "scaler_version TEXT NOT NULL, feature_definition_version TEXT NOT NULL, "
                 "compatibility_rule_version TEXT NOT NULL, input_hash TEXT NOT NULL, "
                 "result_hash TEXT NOT NULL, created_at TEXT NOT NULL, payload_json TEXT NOT NULL, "
+                "payload_hash TEXT, safe_payload_hash TEXT, "
                 "UNIQUE(task_id, diagnostic_result_id, query_feature_hash, case_index_hash, "
                 "scaler_version, compatibility_rule_version, input_hash))"
             )
+            case_retrieval_columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(case_retrieval_results)"
+                ).fetchall()
+            }
+            for column in ("payload_hash", "safe_payload_hash"):
+                if column not in case_retrieval_columns:
+                    connection.execute(
+                        f"ALTER TABLE case_retrieval_results ADD COLUMN {column} TEXT"
+                    )
+            self._backfill_case_retrieval_confirmation_hashes(connection)
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS current_case_retrieval_results ("
                 "task_id TEXT PRIMARY KEY, retrieval_result_id TEXT NOT NULL UNIQUE)"
@@ -168,6 +287,28 @@ class TaskStore:
                 "refusal_code TEXT NOT NULL, result_hash TEXT NOT NULL, "
                 "created_at TEXT NOT NULL, payload_json TEXT NOT NULL)"
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS confirmed_plans ("
+                "confirmed_plan_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, "
+                "planning_result_id TEXT NOT NULL, candidate_id TEXT NOT NULL, "
+                "candidate_hash TEXT NOT NULL, confirmed_plan_hash TEXT NOT NULL, "
+                "status TEXT NOT NULL, confirmed_at TEXT NOT NULL, "
+                "payload_json TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS confirmed_plans_task_id_idx "
+                "ON confirmed_plans(task_id)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS current_confirmed_plans ("
+                "task_id TEXT PRIMARY KEY, confirmed_plan_id TEXT NOT NULL UNIQUE)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS audit_events ("
+                "event_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, "
+                "action TEXT NOT NULL, result TEXT NOT NULL, occurred_at TEXT NOT NULL, "
+                "payload_json TEXT NOT NULL)"
+            )
 
     def get(self, task_id: str) -> Task | None:
         with self._connect() as connection:
@@ -178,6 +319,34 @@ class TaskStore:
         if row is None:
             return None
         return self._deserialize(row["payload_json"])
+
+    def has_task(self, task_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+        return row is not None
+
+    def get_confirmation_task(self, task_id: str) -> Task | None:
+        with self._connect() as connection:
+            try:
+                row = connection.execute(
+                    "SELECT json_remove(payload_json, '$.parameter_planning_result', "
+                    "'$.confirmed_plan') AS payload_json FROM tasks WHERE task_id = ?",
+                    (task_id,),
+                ).fetchone()
+            except sqlite3.Error as error:
+                raise ConfirmationStateChangedError(
+                    "任务确认投影格式无效。"
+                ) from error
+        if row is None:
+            return None
+        try:
+            return self._deserialize(row["payload_json"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+            raise ConfirmationStateChangedError(
+                "任务确认投影格式无效。"
+            ) from error
 
     def get_or_create(self, task: Task) -> Task:
         payload = json.dumps(asdict(task), ensure_ascii=False, separators=(",", ":"))
@@ -289,6 +458,40 @@ class TaskStore:
             ).fetchall()
         return tuple(json.loads(row["payload_json"]) for row in rows)
 
+    def get_current_detection(
+        self, task_id: str
+    ) -> AnomalyDetectionRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT result.payload_json FROM current_anomaly_detection_results current "
+                "JOIN anomaly_detection_results result "
+                "ON result.detection_result_id = current.detection_result_id "
+                "WHERE current.task_id = ?",
+                (task_id,),
+            ).fetchone()
+        return (
+            None
+            if row is None
+            else deserialize_detection_record(json.loads(row["payload_json"]))
+        )
+
+    def get_current_diagnostic(
+        self, task_id: str
+    ) -> DiagnosticResultRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT result.payload_json FROM current_diagnostic_results current "
+                "JOIN diagnostic_results result "
+                "ON result.diagnostic_result_id = current.diagnostic_result_id "
+                "WHERE current.task_id = ?",
+                (task_id,),
+            ).fetchone()
+        return (
+            None
+            if row is None
+            else deserialize_diagnostic_result(json.loads(row["payload_json"]))
+        )
+
     def get_planning_input(self, task_id: str) -> StoredPlanningInput:
         with self._connect() as connection:
             payloads: dict[str, dict | None] = {}
@@ -310,6 +513,52 @@ class TaskStore:
             manifest=payloads["manifest"],
             batch=payloads["batch"],
             measurements=tuple(json.loads(row["payload_json"]) for row in rows),
+            control_limits=payloads["control_limits"],
+            parameter_constraints=payloads["parameter_constraints"],
+        )
+
+    def get_confirmation_input(self, task_id: str) -> StoredPlanningInput:
+        with self._connect() as connection:
+            payloads: dict[str, dict | None] = {}
+            try:
+                manifest_row = connection.execute(
+                    "SELECT json_remove(payload_json, '$.scenario_ref') AS payload_json "
+                    "FROM dataset_manifests WHERE task_id = ?",
+                    (task_id,),
+                ).fetchone()
+                payloads["manifest"] = (
+                    None
+                    if manifest_row is None
+                    else json.loads(manifest_row["payload_json"])
+                )
+                for key, table in (
+                    ("batch", "batches"),
+                    ("control_limits", "control_limit_snapshots"),
+                    ("parameter_constraints", "parameter_constraint_snapshots"),
+                ):
+                    row = connection.execute(
+                        f"SELECT payload_json FROM {table} WHERE task_id = ?",
+                        (task_id,),
+                    ).fetchone()
+                    payloads[key] = (
+                        None if row is None else json.loads(row["payload_json"])
+                    )
+                rows = connection.execute(
+                    "SELECT payload_json FROM measurements WHERE task_id = ? "
+                    "ORDER BY sample_index",
+                    (task_id,),
+                ).fetchall()
+                measurements = tuple(
+                    json.loads(row["payload_json"]) for row in rows
+                )
+            except (sqlite3.Error, json.JSONDecodeError, TypeError) as error:
+                raise ConfirmationStateChangedError(
+                    "确认输入或快照格式无效。"
+                ) from error
+        return StoredPlanningInput(
+            manifest=payloads["manifest"],
+            batch=payloads["batch"],
+            measurements=measurements,
             control_limits=payloads["control_limits"],
             parameter_constraints=payloads["parameter_constraints"],
         )
@@ -466,6 +715,112 @@ class TaskStore:
             return None
         return deserialize_case_retrieval_result(json.loads(row["payload_json"]))
 
+    def get_current_case_retrieval_binding(
+        self,
+        task_id: str,
+    ) -> StoredCaseRetrievalBinding | None:
+        with self._connect() as connection:
+            return self._get_current_case_retrieval_binding(connection, task_id)
+
+    @staticmethod
+    def _get_current_case_retrieval_binding(
+        connection: sqlite3.Connection,
+        task_id: str,
+    ) -> StoredCaseRetrievalBinding | None:
+        try:
+            row = connection.execute(
+                "SELECT result.retrieval_result_id, result.task_id, "
+                "result.diagnostic_result_id, "
+                "result.case_index_version, result.case_index_hash, "
+                "result.scaler_version, result.feature_definition_version, "
+                "result.compatibility_rule_version, result.input_hash, result.result_hash, "
+                "result.payload_hash, result.safe_payload_hash, "
+                "hex(CAST(result.payload_json AS BLOB)) AS payload_hex, "
+                "json_remove(result.payload_json, '$.ordered_cases') AS safe_top_json "
+                "FROM current_case_retrieval_results current "
+                "JOIN case_retrieval_results result "
+                "ON result.retrieval_result_id = current.retrieval_result_id "
+                "WHERE current.task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            case_rows = connection.execute(
+                "SELECT CAST(json_extract(value, '$.rank') AS INTEGER) AS rank, "
+                "json_extract(value, '$.case_id') AS case_id, "
+                "json_extract(value, '$.case_content_hash') AS case_content_hash, "
+                "json_remove(value, '$.historical_simulated_result') AS safe_case_json "
+                "FROM current_case_retrieval_results current "
+                "JOIN case_retrieval_results result "
+                "ON result.retrieval_result_id = current.retrieval_result_id, "
+                "json_each(result.payload_json, '$.ordered_cases') "
+                "WHERE current.task_id = ? ORDER BY rank",
+                (task_id,),
+            ).fetchall()
+            safe_top = json.loads(row["safe_top_json"])
+            safe_cases = [json.loads(case["safe_case_json"]) for case in case_rows]
+        except (sqlite3.Error, json.JSONDecodeError, TypeError) as error:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_RESULT_HASH_MISMATCH",
+                "当前案例检索结果的安全确认投影无效。",
+            ) from error
+        safe_payload = dict(safe_top)
+        safe_payload["ordered_cases"] = safe_cases
+        actual_payload_hash = hashlib.sha256(
+            bytes.fromhex(row["payload_hex"])
+        ).hexdigest()
+        actual_safe_payload_hash = _canonical_sha256(safe_payload)
+        ordered_case_ids = tuple(case_row["case_id"] for case_row in case_rows)
+        if (
+            row["payload_hash"] is None
+            or row["safe_payload_hash"] is None
+            or actual_payload_hash != row["payload_hash"]
+            or actual_safe_payload_hash != row["safe_payload_hash"]
+            or safe_top.get("retrieval_result_version")
+            != CASE_RETRIEVAL_RESULT_VERSION
+            or safe_top.get("retrieval_result_id") != row["retrieval_result_id"]
+            or safe_top.get("task_id") != row["task_id"]
+            or safe_top.get("diagnostic_result_id") != row["diagnostic_result_id"]
+            or safe_top.get("case_index_version") != row["case_index_version"]
+            or safe_top.get("case_index_hash") != row["case_index_hash"]
+            or safe_top.get("scaler_version") != row["scaler_version"]
+            or safe_top.get("feature_definition_version")
+            != row["feature_definition_version"]
+            or safe_top.get("compatibility_rule_version")
+            != row["compatibility_rule_version"]
+            or safe_top.get("retrieval_rule_version") != RETRIEVAL_RULE_VERSION
+            or safe_top.get("input_hash") != row["input_hash"]
+            or safe_top.get("result_hash") != row["result_hash"]
+            or safe_top.get("returned_count") != len(safe_cases)
+            or tuple(case.get("rank") for case in safe_cases)
+            != tuple(range(1, len(safe_cases) + 1))
+            or len(set(ordered_case_ids)) != len(ordered_case_ids)
+        ):
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_RESULT_HASH_MISMATCH",
+                "当前案例检索结果的内容、版本或哈希已变化。",
+            )
+        return StoredCaseRetrievalBinding(
+            retrieval_result_version=safe_top["retrieval_result_version"],
+            retrieval_result_id=row["retrieval_result_id"],
+            task_id=row["task_id"],
+            diagnostic_result_id=row["diagnostic_result_id"],
+            case_index_version=row["case_index_version"],
+            case_index_hash=row["case_index_hash"],
+            scaler_version=row["scaler_version"],
+            feature_definition_version=row["feature_definition_version"],
+            compatibility_rule_version=row["compatibility_rule_version"],
+            retrieval_rule_version=safe_top["retrieval_rule_version"],
+            input_hash=row["input_hash"],
+            result_hash=row["result_hash"],
+            safe_payload_hash=actual_safe_payload_hash,
+            ordered_case_ids=ordered_case_ids,
+            case_content_hashes={
+                case_row["case_id"]: case_row["case_content_hash"]
+                for case_row in case_rows
+            },
+        )
+
     def save_case_retrieval(
         self,
         task: Task,
@@ -477,6 +832,10 @@ class TaskStore:
             )
         record_payload = json.dumps(
             asdict(record), ensure_ascii=False, separators=(",", ":")
+        )
+        payload_hash = hashlib.sha256(record_payload.encode("utf-8")).hexdigest()
+        safe_payload_hash = _canonical_sha256(
+            _confirmation_safe_retrieval_payload(asdict(record))
         )
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -533,8 +892,8 @@ class TaskStore:
                 "retrieval_result_id, task_id, diagnostic_result_id, query_feature_hash, "
                 "case_index_version, case_index_hash, scaler_version, "
                 "feature_definition_version, compatibility_rule_version, input_hash, "
-                "result_hash, created_at, payload_json) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "result_hash, created_at, payload_json, payload_hash, safe_payload_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     record.retrieval_result_id,
                     record.task_id,
@@ -549,6 +908,8 @@ class TaskStore:
                     record.result_hash,
                     record.created_at,
                     record_payload,
+                    payload_hash,
+                    safe_payload_hash,
                 ),
             )
             connection.execute(
@@ -678,6 +1039,302 @@ class TaskStore:
             raise RuntimeError("参数规划结果保存失败。")
         return stored_task, record
 
+    def get_current_confirmed_plan(self, task_id: str) -> ConfirmedPlan | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT plan.payload_json, plan.status FROM current_confirmed_plans current "
+                "JOIN confirmed_plans plan "
+                "ON plan.confirmed_plan_id = current.confirmed_plan_id "
+                "WHERE current.task_id = ?",
+                (task_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        plan = deserialize_confirmed_plan(json.loads(row["payload_json"]))
+        if plan.status != row["status"]:
+            raise PlanConfirmationGuardError(
+                "CONFIRMED_PLAN_STATUS_MISMATCH",
+                "ConfirmedPlan 状态列与不可变载荷不一致。",
+            )
+        return plan
+
+    def confirmation_state_token(self, task_id: str) -> str:
+        with self._connect() as connection:
+            try:
+                return self._confirmation_state_token(connection, task_id)
+            except (sqlite3.Error, CaseRetrievalGuardError) as error:
+                raise ConfirmationStateChangedError(
+                    "确认状态投影格式无效或完整性校验失败。"
+                ) from error
+
+    @staticmethod
+    def _confirmation_state_token(
+        connection: sqlite3.Connection,
+        task_id: str,
+    ) -> str:
+        state: dict[str, object] = {}
+        for table in (
+            "tasks",
+            "batches",
+            "control_limit_snapshots",
+            "parameter_constraint_snapshots",
+        ):
+            row = connection.execute(
+                f"SELECT payload_json FROM {table} WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            state[table] = None if row is None else row["payload_json"]
+        manifest = connection.execute(
+            "SELECT json_remove(payload_json, '$.scenario_ref') AS payload_json "
+            "FROM dataset_manifests WHERE task_id = ?",
+            (task_id,),
+        ).fetchone()
+        state["dataset_manifest"] = (
+            None if manifest is None else manifest["payload_json"]
+        )
+        state["measurements"] = [
+            (row["sample_index"], row["payload_json"])
+            for row in connection.execute(
+                "SELECT sample_index, payload_json FROM measurements "
+                "WHERE task_id = ? ORDER BY sample_index",
+                (task_id,),
+            ).fetchall()
+        ]
+        for name, current_table, result_table, result_id in (
+            (
+                "detection",
+                "current_anomaly_detection_results",
+                "anomaly_detection_results",
+                "detection_result_id",
+            ),
+            (
+                "diagnostic",
+                "current_diagnostic_results",
+                "diagnostic_results",
+                "diagnostic_result_id",
+            ),
+            (
+                "planning",
+                "current_parameter_planning_results",
+                "parameter_planning_results",
+                "planning_result_id",
+            ),
+        ):
+            row = connection.execute(
+                f"SELECT current.{result_id} AS result_id, result.payload_json "
+                f"FROM {current_table} current JOIN {result_table} result "
+                f"ON result.{result_id} = current.{result_id} "
+                "WHERE current.task_id = ?",
+                (task_id,),
+            ).fetchone()
+            state[name] = (
+                None
+                if row is None
+                else (row["result_id"], row["payload_json"])
+            )
+        retrieval = TaskStore._get_current_case_retrieval_binding(
+            connection, task_id
+        )
+        state["retrieval"] = None if retrieval is None else asdict(retrieval)
+        canonical = json.dumps(
+            state,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()
+
+    def save_confirmation(
+        self,
+        task: Task,
+        plan: ConfirmedPlan,
+        event: AuditEvent,
+        expected_state_token: str,
+        expected_file_asset_token: str,
+        file_asset_token_reader: Callable[[], str],
+    ) -> tuple[Task, ConfirmedPlan, bool]:
+        task_payload = json.dumps(asdict(task), ensure_ascii=False, separators=(",", ":"))
+        plan_payload = json.dumps(asdict(plan), ensure_ascii=False, separators=(",", ":"))
+        event_payload = json.dumps(asdict(event), ensure_ascii=False, separators=(",", ":"))
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                current_state_token = self._confirmation_state_token(
+                    connection, task.task_id
+                )
+            except (sqlite3.Error, CaseRetrievalGuardError) as error:
+                raise ConfirmationStateChangedError(
+                    "确认提交点的状态投影无效或完整性校验失败。"
+                ) from error
+            if current_state_token != expected_state_token:
+                raise ConfirmationStateChangedError(
+                    "确认期间任务输入、快照或当前结果已变化。"
+                )
+            try:
+                current_file_asset_token = file_asset_token_reader()
+            except Exception as error:
+                raise ConfirmationStateChangedError(
+                    "确认提交点的受信任文件资产已缺失或变化。"
+                ) from error
+            if current_file_asset_token != expected_file_asset_token:
+                raise ConfirmationStateChangedError(
+                    "确认提交点的受信任文件资产哈希已变化。"
+                )
+            current_task_row = connection.execute(
+                "SELECT payload_json FROM tasks WHERE task_id = ?", (task.task_id,)
+            ).fetchone()
+            if current_task_row is None:
+                raise ConfirmedPlanConflictError("调机任务不存在。")
+            current_task = self._deserialize(current_task_row["payload_json"])
+            current_plan_row = connection.execute(
+                "SELECT plan.payload_json, plan.status FROM current_confirmed_plans current "
+                "JOIN confirmed_plans plan "
+                "ON plan.confirmed_plan_id = current.confirmed_plan_id "
+                "WHERE current.task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if current_plan_row is not None:
+                stored_plan = deserialize_confirmed_plan(
+                    json.loads(current_plan_row["payload_json"])
+                )
+                if stored_plan.status != current_plan_row["status"]:
+                    raise ConfirmedPlanConflictError(
+                        "当前 ConfirmedPlan 状态绑定不一致。"
+                    )
+                if (
+                    stored_plan.candidate_id == plan.candidate_id
+                    and stored_plan.candidate_hash == plan.candidate_hash
+                    and stored_plan.planning_result_id == plan.planning_result_id
+                ):
+                    return current_task, stored_plan, False
+                raise ConfirmedPlanConflictError("任务已有不同的当前确认方案。")
+            if current_task.status is not TaskStatus.PLAN_READY:
+                raise ConfirmedPlanConflictError("当前任务状态不允许确认参数方案。")
+            current_planning = connection.execute(
+                "SELECT planning_result_id FROM current_parameter_planning_results "
+                "WHERE task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if (
+                current_planning is None
+                or current_planning["planning_result_id"] != plan.planning_result_id
+            ):
+                raise ConfirmedPlanConflictError("确认候选不属于当前参数规划结果。")
+            connection.execute(
+                "INSERT INTO confirmed_plans ("
+                "confirmed_plan_id, task_id, planning_result_id, candidate_id, "
+                "candidate_hash, confirmed_plan_hash, status, confirmed_at, payload_json"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    plan.confirmed_plan_id,
+                    plan.task_id,
+                    plan.planning_result_id,
+                    plan.candidate_id,
+                    plan.candidate_hash,
+                    plan.confirmed_plan_hash,
+                    plan.status,
+                    plan.confirmed_at,
+                    plan_payload,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO current_confirmed_plans (task_id, confirmed_plan_id) "
+                "VALUES (?, ?)",
+                (plan.task_id, plan.confirmed_plan_id),
+            )
+            connection.execute(
+                "INSERT INTO audit_events ("
+                "event_id, task_id, action, result, occurred_at, payload_json"
+                ") VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    event.event_id,
+                    event.task_id,
+                    event.action,
+                    event.result,
+                    event.occurred_at,
+                    event_payload,
+                ),
+            )
+            connection.execute(
+                "UPDATE tasks SET payload_json = ? WHERE task_id = ?",
+                (task_payload, task.task_id),
+            )
+        stored_task = self.get(task.task_id)
+        if stored_task is None:
+            raise RuntimeError("确认方案保存失败。")
+        return stored_task, plan, True
+
+    def append_audit_event(self, event: AuditEvent) -> None:
+        payload = json.dumps(asdict(event), ensure_ascii=False, separators=(",", ":"))
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO audit_events ("
+                "event_id, task_id, action, result, occurred_at, payload_json"
+                ") VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    event.event_id,
+                    event.task_id,
+                    event.action,
+                    event.result,
+                    event.occurred_at,
+                    payload,
+                ),
+            )
+
+    def mark_confirmed_plan_stale(
+        self,
+        task: Task,
+        plan: ConfirmedPlan,
+    ) -> Task:
+        task_payload = json.dumps(asdict(task), ensure_ascii=False, separators=(",", ":"))
+        plan_payload = json.dumps(asdict(plan), ensure_ascii=False, separators=(",", ":"))
+        already_stale = False
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT plan.payload_json, plan.status FROM current_confirmed_plans current "
+                "JOIN confirmed_plans plan "
+                "ON plan.confirmed_plan_id = current.confirmed_plan_id "
+                "WHERE current.task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if row is None:
+                raise ConfirmedPlanConflictError("当前 ConfirmedPlan 不存在。")
+            stored = deserialize_confirmed_plan(json.loads(row["payload_json"]))
+            if stored.status != row["status"]:
+                raise ConfirmedPlanConflictError(
+                    "当前 ConfirmedPlan 状态绑定不一致。"
+                )
+            if stored.confirmed_plan_id != plan.confirmed_plan_id:
+                raise ConfirmedPlanConflictError("当前 ConfirmedPlan 已发生冲突。")
+            if stored.status == "STALE":
+                already_stale = True
+            else:
+                connection.execute(
+                    "UPDATE confirmed_plans SET status = ?, payload_json = ? "
+                    "WHERE confirmed_plan_id = ? AND status = 'VALID'",
+                    ("STALE", plan_payload, plan.confirmed_plan_id),
+                )
+                connection.execute(
+                    "UPDATE tasks SET payload_json = ? WHERE task_id = ?",
+                    (task_payload, task.task_id),
+                )
+        stored_task = self.get(task.task_id)
+        if stored_task is None:
+            raise RuntimeError("过期方案状态保存失败。")
+        if already_stale and stored_task.confirmed_plan is None:
+            raise RuntimeError("过期方案关联任务缺少 ConfirmedPlan。")
+        return stored_task
+
+    def get_audit_events(self, task_id: str) -> tuple[AuditEvent, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM audit_events WHERE task_id = ? "
+                "ORDER BY occurred_at, event_id",
+                (task_id,),
+            ).fetchall()
+        return tuple(AuditEvent(**json.loads(row["payload_json"])) for row in rows)
+
     @staticmethod
     def _deserialize(payload_json: str) -> Task:
         payload = json.loads(payload_json)
@@ -704,6 +1361,7 @@ class TaskStore:
         detection_payload = payload.get("anomaly_detection")
         diagnostic_payload = payload.get("diagnostic_result")
         planning_payload = payload.get("parameter_planning_result")
+        confirmed_plan_payload = payload.get("confirmed_plan")
         return Task(
             task_id=payload["task_id"],
             status=TaskStatus(payload["status"]),
@@ -732,5 +1390,10 @@ class TaskStore:
                 None
                 if planning_payload is None
                 else deserialize_parameter_planning_result(planning_payload)
+            ),
+            confirmed_plan=(
+                None
+                if confirmed_plan_payload is None
+                else deserialize_confirmed_plan(confirmed_plan_payload)
             ),
         )

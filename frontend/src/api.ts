@@ -33,6 +33,7 @@ export type Task = {
   anomaly_detection?: AnomalyDetectionResult | null;
   diagnostic_result?: DiagnosticResult | null;
   parameter_planning_result?: ParameterPlanningResult | null;
+  confirmed_plan?: ConfirmedPlan | null;
 };
 
 export type DiagnosticEvidence = {
@@ -259,6 +260,61 @@ export type ParameterPlanningResponse = {
   planning: ParameterPlanningResult;
 };
 
+export type ConfirmedPlan = {
+  confirmed_plan_id: string;
+  confirmed_plan_version: string;
+  confirmed_plan_hash: string;
+  task_id: string;
+  planning_result_id: string;
+  planning_result_version: string;
+  candidate_id: string;
+  candidate_hash: string;
+  current_values: Record<string, string>;
+  proposed_values: Record<string, string>;
+  deltas: Record<string, string>;
+  delta_ticks: Record<string, number | null>;
+  parameter_family: string;
+  root_cause: string;
+  generation_type: string;
+  supporting_case_ids: string[];
+  direction_evidence_hashes: string[];
+  actor_id: string;
+  actor_role: string;
+  display_name: string;
+  confirmed_at: string;
+  status: "VALID" | "STALE";
+  stale_reason_codes: string[];
+  freshness_rule_version: string;
+  input_data_version: string;
+  input_measurement_hash: string;
+  current_parameter_hash: string;
+  detection_result_id: string;
+  detection_result_version: string;
+  diagnostic_result_id: string;
+  diagnostic_result_version: string;
+  case_retrieval_result_id: string | null;
+  case_retrieval_result_version: string | null;
+  control_limit_snapshot_version: string;
+  control_limit_snapshot_hash: string;
+  parameter_constraint_snapshot_version: string;
+  parameter_constraint_snapshot_hash: string;
+  direction_rule_version: string;
+  safety_rule_version: string;
+  planning_rule_version: string;
+  rule_set_version: string;
+  feature_definition_version: string;
+  model_version: string;
+  preprocessing_version: string;
+  approved_case_index_version: string | null;
+  source_asset_hashes: Record<string, string>;
+  created_at: string;
+};
+
+export type PlanConfirmationResponse = {
+  task: Task;
+  confirmed_plan: ConfirmedPlan;
+};
+
 export type RuleCheck = {
   rule_id: string;
   status: "PASSED" | "FAILED" | "NOT_EVALUATED";
@@ -472,4 +528,28 @@ export async function generateParameterPlans(
     );
   }
   return payload as ParameterPlanningResponse;
+}
+
+export async function confirmParameterPlan(
+  taskId: string,
+  candidateId: string,
+  candidateHash: string,
+): Promise<PlanConfirmationResponse> {
+  const response = await fetch(`/api/tasks/${taskId}/confirmed-plans`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      candidate_id: candidateId,
+      candidate_hash: candidateHash,
+    }),
+  });
+  const payload = (await response.json()) as PlanConfirmationResponse | ErrorPayload;
+  if (!response.ok) {
+    const error = (payload as ErrorPayload).error;
+    throw new TaskCreationError(
+      error?.code ?? "PLAN_CONFIRMATION_FAILED",
+      error?.message ?? "无法人工确认候选方案。",
+    );
+  }
+  return payload as PlanConfirmationResponse;
 }

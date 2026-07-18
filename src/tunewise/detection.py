@@ -11,6 +11,7 @@ from enum import StrEnum
 from .importing import CANONICAL_PRECISION, OBSERVABLE_FIELDS
 
 
+DETECTION_RESULT_VERSION = "tw-anomaly-detection-result-v1"
 CORNER_FIELDS: tuple[str, ...] = ("mtf_lt", "mtf_rt", "mtf_lb", "mtf_rb")
 
 

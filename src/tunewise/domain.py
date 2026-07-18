@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from .detection import AnomalyDetectionRecord
     from .diagnosis import DiagnosticResultRecord
     from .parameter_planning import ParameterPlanningResultRecord
+    from .plan_confirmation import ConfirmedPlan
 
 
 class TaskStatus(StrEnum):
@@ -135,6 +136,7 @@ class Task:
     anomaly_detection: AnomalyDetectionRecord | None = None
     diagnostic_result: DiagnosticResultRecord | None = None
     parameter_planning_result: ParameterPlanningResultRecord | None = None
+    confirmed_plan: ConfirmedPlan | None = None
 
 
 STAGE_LABELS: tuple[tuple[TaskStatus, str], ...] = (

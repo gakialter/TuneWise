@@ -10,6 +10,11 @@ from typing import Never
 from .assets import AssetIntegrityError, PublicAssetLoader
 from .case_retrieval import (
     CASE_RETRIEVAL_RESULT_VERSION,
+    CASE_INDEX_VERSION,
+    CASE_SCHEMA_VERSION,
+    COMPATIBILITY_RULE_VERSION,
+    RETRIEVAL_RULE_VERSION,
+    SCALER_VERSION,
     ApprovedCaseAssetLoader,
     CaseRetrievalAssetError,
     CaseRetrievalGuardError,
@@ -19,6 +24,7 @@ from .case_retrieval import (
 )
 from .domain import Task, TaskStatus, workflow_for
 from .detection import (
+    DETECTION_RESULT_VERSION,
     AnomalyDetectionRecord,
     AnomalyDetector,
     AnomalyResult,
@@ -35,6 +41,7 @@ from .detection import (
 )
 from .importing import DemoDatasetImporter, ImportValidationError
 from .diagnosis import (
+    DiagnosticAssetError,
     DiagnosticAssetLoader,
     DiagnosticGuardError,
     DiagnosticResultRecord,
@@ -65,6 +72,17 @@ from .parameter_planning import (
     record_parameter_planning_refusal,
     record_parameter_planning,
     validate_current_parameter_values,
+    candidate_content_hash,
+)
+from .plan_confirmation import (
+    AuditEvent,
+    ConfirmedPlan,
+    ConfirmedPlanFreshnessEvaluator,
+    FreshnessBinding,
+    PlanConfirmationGuardError,
+    canonical_hash,
+    create_audit_event,
+    create_confirmed_plan,
 )
 from .store import (
     CaseRetrievalResultConflictError,
@@ -74,6 +92,8 @@ from .store import (
     StoredDetectionInput,
     TaskStore,
     ParameterPlanningResultConflictError,
+    ConfirmedPlanConflictError,
+    ConfirmationStateChangedError,
 )
 
 
@@ -147,7 +167,15 @@ class TaskService:
             versions=assets.versions,
             stages=workflow_for(TaskStatus.CREATED),
         )
-        return self._store.get_or_create(task)
+        stored = self._store.get_or_create(task)
+        if stored.actor != assets.actor or stored.versions != assets.versions:
+            raise AssetIntegrityError(
+                "TASK_ASSET_SNAPSHOT_MISMATCH",
+                "任务绑定的公共版本快照与当前资产不一致。",
+            )
+        if stored.confirmed_plan is not None:
+            stored = self._refresh_confirmed_plan(stored)
+        return stored
 
     def get_task(self, task_id: str) -> Task | None:
         assets = self._asset_loader.load()
@@ -159,6 +187,22 @@ class TaskService:
                 "TASK_ASSET_SNAPSHOT_MISMATCH",
                 "任务绑定的公共版本快照与当前资产不一致。",
             )
+        if task is not None and task.confirmed_plan is not None:
+            stored_plan = self._store.get_current_confirmed_plan(task.task_id)
+            if (
+                stored_plan is None
+                or stored_plan.confirmed_plan_id
+                != task.confirmed_plan.confirmed_plan_id
+                or stored_plan.confirmed_plan_hash
+                != task.confirmed_plan.confirmed_plan_hash
+            ):
+                raise PlanConfirmationGuardError(
+                    "CONFIRMED_PLAN_HASH_MISMATCH",
+                    "任务与当前 ConfirmedPlan 的不可变绑定不一致。",
+                )
+            if stored_plan != task.confirmed_plan:
+                task = replace(task, confirmed_plan=stored_plan)
+            task = self._refresh_confirmed_plan(task)
         return task
 
     def record_parameter_planning_request_refusal(
@@ -1046,6 +1090,1080 @@ class TaskService:
                 "当前任务的参数规划结果已发生冲突。",
             ) from error
 
+    def confirm_parameter_plan(
+        self,
+        task_id: str,
+        candidate_id: str,
+        candidate_hash: str,
+    ) -> tuple[Task, ConfirmedPlan]:
+        self._planning_boundary_audit.assert_pristine()
+        try:
+            task = self.get_task(task_id)
+        except ParameterPlanningGuardError as error:
+            try:
+                task = self._store.get_confirmation_task(task_id)
+            except ConfirmationStateChangedError:
+                task = None
+            if task is None:
+                raise PlanConfirmationGuardError(
+                    "PLANNING_RESULT_STALE",
+                    "任务内嵌 ParameterPlanningResult 无法安全读取。",
+                ) from error
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "PLANNING_RESULT_STALE",
+                "任务内嵌 ParameterPlanningResult 内容完整性校验失败。",
+                actual_version=error.code,
+            )
+        if task is None:
+            raise PlanConfirmationGuardError(
+                "TASK_NOT_FOUND", "调机任务不存在。", 404
+            )
+        existing = self._store.get_current_confirmed_plan(task_id)
+        if task.status is TaskStatus.PLAN_CONFIRMED:
+            if existing is None:
+                self._raise_confirmation_guard(
+                    task,
+                    candidate_id,
+                    candidate_hash,
+                    "CONFIRMED_PLAN_CONFLICT",
+                    "任务已确认但缺少当前 ConfirmedPlan。",
+                )
+            if (
+                existing.candidate_id == candidate_id
+                and existing.candidate_hash == candidate_hash
+                and existing.status == "VALID"
+            ):
+                return task, existing
+            if (
+                existing.candidate_id == candidate_id
+                and existing.candidate_hash == candidate_hash
+                and existing.status == "STALE"
+            ):
+                self._raise_confirmation_guard(
+                    task,
+                    candidate_id,
+                    candidate_hash,
+                    "CANDIDATE_STALE",
+                    "已确认方案已过期，不能作为有效幂等确认结果返回。",
+                )
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CONFIRMED_PLAN_CONFLICT",
+                "任务已确认其他候选，本票不允许改选方案。",
+                expected_hash=existing.candidate_hash,
+                actual_hash=candidate_hash,
+            )
+        if task.status is not TaskStatus.PLAN_READY:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "TASK_NOT_PLAN_READY",
+                "只有 PLAN_READY 任务可以人工确认候选。",
+                actual_version=task.status.value,
+                expected_version=TaskStatus.PLAN_READY.value,
+            )
+        try:
+            initial_state_token = self._store.confirmation_state_token(task_id)
+        except ConfirmationStateChangedError as error:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_STALE",
+                "确认状态投影格式无效或完整性校验失败。",
+                actual_version=type(error.__cause__).__name__,
+            )
+        try:
+            planning = self._store.get_current_parameter_planning(task_id)
+        except ParameterPlanningGuardError as error:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "PLANNING_RESULT_STALE",
+                "当前 ParameterPlanningResult 内容完整性校验失败。",
+                actual_version=error.code,
+            )
+        if planning is None:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "PLANNING_RESULT_STALE",
+                "当前任务缺少最新 ParameterPlanningResult。",
+            )
+        if planning.planning_status != "CANDIDATES_AVAILABLE":
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "PLANNING_RESULT_STALE",
+                "当前参数规划结果没有可确认候选。",
+                actual_version=planning.planning_status,
+                expected_version="CANDIDATES_AVAILABLE",
+            )
+        candidate = next(
+            (
+                item
+                for item in planning.ordered_candidates
+                if item.candidate_id == candidate_id
+            ),
+            None,
+        )
+        if candidate is None:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_NOT_FOUND",
+                "candidate_id 不存在于当前最新参数规划结果。",
+            )
+        if candidate.validation_status != "PASSED":
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_NOT_PASSED",
+                "只有 PASSED 候选可以人工确认。",
+            )
+        expected_candidate_hash = candidate_content_hash(candidate)
+        if candidate.candidate_hash != expected_candidate_hash:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_HASH_MISMATCH",
+                "服务端候选规范化内容哈希不匹配。",
+                expected_hash=expected_candidate_hash,
+                actual_hash=candidate.candidate_hash,
+            )
+        if candidate_hash != candidate.candidate_hash:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_HASH_MISMATCH",
+                "请求 candidate_hash 与服务端当前候选不一致。",
+                expected_hash=candidate.candidate_hash,
+                actual_hash=candidate_hash,
+            )
+        try:
+            binding, snapshot, planning_assets = self._confirmation_binding(
+                task, planning, candidate
+            )
+        except (
+            ParameterPlanningAssetError,
+            CaseRetrievalAssetError,
+            CaseRetrievalGuardError,
+            ConfirmationStateChangedError,
+            PlanConfirmationGuardError,
+        ) as error:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_STALE",
+                "候选的当前版本、快照或受信任资产绑定已失效。",
+                actual_version=getattr(error, "code", type(error).__name__),
+            )
+        validation = ParameterSafetyValidator(
+            planning_assets.safety_policy
+        ).validate(
+            candidate,
+            snapshot=snapshot,
+            versions=SafetyVersionContext(
+                constraint_snapshot_version=binding.parameter_constraint_snapshot_version,
+                rule_set_version=binding.rule_set_version,
+                direction_rule_version=binding.direction_rule_version,
+                safety_rule_version=binding.safety_rule_version,
+                diagnostic_result_version=binding.diagnostic_result_version,
+                case_retrieval_result_version=binding.case_retrieval_result_version,
+            ),
+        )
+        if validation.validation_status != "PASSED":
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "SAFETY_REVALIDATION_FAILED",
+                "候选未通过确认阶段 ParameterSafetyValidator 复核。",
+            )
+        now = self._clock.now()
+        plan = create_confirmed_plan(
+            task_id=task_id,
+            planning_result_id=planning.planning_result_id,
+            planning_result_version=planning.planning_result_version,
+            candidate=candidate,
+            actor_id=task.actor.actor_id,
+            actor_role=task.actor.actor_role,
+            display_name=task.actor.display_name,
+            confirmed_at=now,
+            binding=binding,
+        )
+        try:
+            final_binding, _final_snapshot, _final_assets = self._confirmation_binding(
+                task, planning, candidate
+            )
+        except (
+            ParameterPlanningAssetError,
+            CaseRetrievalAssetError,
+            CaseRetrievalGuardError,
+            ConfirmationStateChangedError,
+            PlanConfirmationGuardError,
+        ) as error:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_STALE",
+                "确认提交点的版本、快照或受信任资产绑定已变化。",
+                actual_version=getattr(error, "code", type(error).__name__),
+            )
+        try:
+            final_state_token = self._store.confirmation_state_token(task_id)
+        except ConfirmationStateChangedError as error:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_STALE",
+                "确认提交点的状态投影格式无效或完整性校验失败。",
+                actual_version=type(error.__cause__).__name__,
+            )
+        try:
+            include_case_assets = final_binding.case_retrieval_result_id is not None
+            final_file_asset_token = self._confirmation_file_asset_token(
+                include_case_assets=include_case_assets
+            )
+        except (
+            ParameterPlanningAssetError,
+            DiagnosticAssetError,
+            CaseRetrievalAssetError,
+            PlanConfirmationGuardError,
+            FileNotFoundError,
+        ) as error:
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_STALE",
+                "确认提交点的受信任文件资产已变化。",
+                actual_version=getattr(error, "code", type(error).__name__),
+            )
+        if final_binding != binding or final_state_token != initial_state_token:
+            try:
+                concurrent_task = self.get_task(task_id)
+            except (
+                AssetIntegrityError,
+                ParameterPlanningGuardError,
+                PlanConfirmationGuardError,
+            ):
+                concurrent_task = None
+            concurrent = (
+                None if concurrent_task is None else concurrent_task.confirmed_plan
+            )
+            if (
+                concurrent is not None
+                and concurrent.candidate_id == candidate_id
+                and concurrent.candidate_hash == candidate_hash
+                and concurrent.status == "VALID"
+            ):
+                return concurrent_task, concurrent
+            if concurrent is not None:
+                self._raise_confirmation_guard(
+                    task,
+                    candidate_id,
+                    candidate_hash,
+                    "CONFIRMED_PLAN_CONFLICT",
+                    "并发确认已选择其他候选。",
+                    expected_hash=concurrent.candidate_hash,
+                    actual_hash=candidate_hash,
+                )
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_STALE",
+                "确认期间任务输入、快照、规则或资产已变化。",
+            )
+        freshness = ConfirmedPlanFreshnessEvaluator().evaluate(plan, final_binding)
+        if freshness.status != "VALID":
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_STALE",
+                "候选 freshness 复核失败。",
+            )
+        event = create_audit_event(
+            task_id=task_id,
+            actor_id=task.actor.actor_id,
+            actor_role=task.actor.actor_role,
+            display_name=task.actor.display_name,
+            occurred_at=now,
+            result="SUCCESS",
+            rule_set_version=task.versions.rule_set_version,
+            candidate_id=candidate_id,
+            candidate_hash=candidate_hash,
+            plan=plan,
+        )
+        updated_task = replace(
+            task,
+            status=TaskStatus.PLAN_CONFIRMED,
+            stages=workflow_for(TaskStatus.PLAN_CONFIRMED),
+            confirmed_plan=plan,
+        )
+        try:
+            stored_task, stored_plan, _created = self._store.save_confirmation(
+                updated_task,
+                plan,
+                event,
+                expected_state_token=initial_state_token,
+                expected_file_asset_token=final_file_asset_token,
+                file_asset_token_reader=lambda: self._confirmation_file_asset_token(
+                    include_case_assets=include_case_assets
+                ),
+            )
+        except ConfirmationStateChangedError:
+            try:
+                current_task = self.get_task(task_id)
+            except (
+                AssetIntegrityError,
+                ParameterPlanningGuardError,
+                PlanConfirmationGuardError,
+            ):
+                current_task = None
+            current = None if current_task is None else current_task.confirmed_plan
+            if (
+                current is not None
+                and current.candidate_id == candidate_id
+                and current.candidate_hash == candidate_hash
+                and current.status == "VALID"
+            ):
+                return current_task, current
+            if current is not None:
+                self._raise_confirmation_guard(
+                    task,
+                    candidate_id,
+                    candidate_hash,
+                    "CONFIRMED_PLAN_CONFLICT",
+                    "并发确认已选择其他候选。",
+                    expected_hash=current.candidate_hash,
+                    actual_hash=candidate_hash,
+                )
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CANDIDATE_STALE",
+                "确认事务开始前任务输入、快照或当前结果已变化。",
+            )
+        except ConfirmedPlanConflictError as error:
+            current = self._store.get_current_confirmed_plan(task_id)
+            if (
+                current is not None
+                and current.candidate_id == candidate_id
+                and current.candidate_hash == candidate_hash
+            ):
+                stored_task = self._store.get(task_id)
+                if stored_task is not None:
+                    return stored_task, current
+            self._raise_confirmation_guard(
+                task,
+                candidate_id,
+                candidate_hash,
+                "CONFIRMED_PLAN_CONFLICT",
+                "并发确认与当前已确认候选冲突。",
+            )
+        self._planning_boundary_audit.assert_pristine()
+        return stored_task, stored_plan
+
+    def record_confirmation_request_refusal(
+        self,
+        task_id: str,
+        candidate_id: str | None,
+        candidate_hash: str | None,
+        forbidden_fields: tuple[str, ...],
+    ) -> PlanConfirmationGuardError:
+        task = self._store.get(task_id)
+        error = PlanConfirmationGuardError(
+            "FORBIDDEN_CONFIRMATION_FIELDS",
+            "确认请求只允许提交 candidate_id 与 candidate_hash。",
+            422,
+        )
+        if task is not None:
+            self._record_confirmation_rejection(
+                task,
+                candidate_id,
+                candidate_hash,
+                error,
+                actual_version=",".join(forbidden_fields),
+            )
+        return error
+
+    def get_audit_events(self, task_id: str) -> tuple[AuditEvent, ...]:
+        return self._store.get_audit_events(task_id)
+
+    def has_task(self, task_id: str) -> bool:
+        return self._store.has_task(task_id)
+
+    def _confirmation_binding(
+        self,
+        task: Task,
+        planning: ParameterPlanningResultRecord,
+        candidate,
+    ) -> tuple[FreshnessBinding, ParameterConstraintSnapshot, object]:
+        if (
+            self._planning_asset_root is None
+            or self._expected_planning_manifest_hash is None
+            or task.data_import is None
+            or task.anomaly_detection is None
+            or task.diagnostic_result is None
+        ):
+            self._raise_confirmation_guard(
+                task,
+                candidate.candidate_id,
+                candidate.candidate_hash,
+                "PLANNING_RESULT_STALE",
+                "确认所需的任务、诊断或规划输入不完整。",
+            )
+        planning_assets = ParameterPlanningAssetLoader(
+            self._planning_asset_root,
+            self._expected_planning_manifest_hash,
+        ).load()
+        if (
+            planning.planning_asset_manifest_hash != planning_assets.manifest_hash
+            or planning.rule_set_version != task.versions.rule_set_version
+            or planning.direction_rule_version
+            != planning_assets.direction_rules.direction_rule_version
+            or planning.safety_rule_version
+            != planning_assets.safety_policy.safety_rule_version
+            or planning.planning_rule_version
+            != planning_assets.planning_policy.planning_rule_version
+        ):
+            raise PlanConfirmationGuardError(
+                "RULE_VERSION_CHANGED",
+                "当前 ParameterPlanningResult 绑定的规则资产已变化。",
+            )
+        if (
+            self._diagnostic_asset_root is None
+            or self._expected_diagnostic_manifest_hash is None
+        ):
+            raise PlanConfirmationGuardError(
+                "DIAGNOSTIC_ASSETS_MISSING",
+                "确认所需的固定诊断资产未装配。",
+            )
+        try:
+            diagnostic_assets = DiagnosticAssetLoader(
+                self._diagnostic_asset_root,
+                self._expected_diagnostic_manifest_hash,
+            ).load()
+        except DiagnosticAssetError as error:
+            raise PlanConfirmationGuardError(
+                "DIAGNOSTIC_ASSET_HASH_MISMATCH",
+                "当前诊断资产内容或版本已变化。",
+            ) from error
+        if (
+            diagnostic_assets.input_asset_hashes
+            != task.diagnostic_result.input_asset_hashes
+            or diagnostic_assets.model.get("model_version")
+            != task.diagnostic_result.model_version
+            or diagnostic_assets.preprocessing.get("preprocessing_version")
+            != task.diagnostic_result.preprocessing_version
+            or diagnostic_assets.feature_definition.get("feature_definition_version")
+            != task.diagnostic_result.feature_definition_version
+        ):
+            raise PlanConfirmationGuardError(
+                "DIAGNOSTIC_ASSET_HASH_MISMATCH",
+                "当前诊断资产与 DiagnosticResult 绑定不一致。",
+            )
+        source = self._store.get_confirmation_input(task.task_id)
+        if source.parameter_constraints is None or source.control_limits is None:
+            self._raise_confirmation_guard(
+                task,
+                candidate.candidate_id,
+                candidate.candidate_hash,
+                "SNAPSHOT_VERSION_MISMATCH",
+                "确认所需只读快照缺失。",
+            )
+        try:
+            snapshot = ParameterConstraintSnapshot.from_payload(
+                source.parameter_constraints
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise PlanConfirmationGuardError(
+                "PARAMETER_CONSTRAINT_SNAPSHOT_CHANGED",
+                "当前 ParameterConstraintSnapshot 格式无效。",
+            ) from error
+        parameter_snapshot_file_hash = hashlib.sha256(
+            (
+                json.dumps(
+                    source.parameter_constraints,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            ).encode("utf-8")
+        ).hexdigest()
+        if (
+            parameter_snapshot_file_hash
+            != planning_assets.expected_parameter_constraint_snapshot_hash
+            or snapshot.snapshot_version != planning.constraint_snapshot_version
+            or snapshot.rule_set_version != planning.rule_set_version
+        ):
+            raise PlanConfirmationGuardError(
+                "PARAMETER_CONSTRAINT_SNAPSHOT_CHANGED",
+                "当前 ParameterConstraintSnapshot 内容或版本已变化。",
+            )
+        current_detection = self._store.get_current_detection(task.task_id)
+        current_diagnostic = self._store.get_current_diagnostic(task.task_id)
+        if (
+            current_detection is None
+            or current_detection.detection_result_id
+            != task.anomaly_detection.detection_result_id
+        ):
+            raise PlanConfirmationGuardError(
+                "DETECTION_VERSION_CHANGED",
+                "当前异常检测结果版本已变化。",
+            )
+        if (
+            current_diagnostic is None
+            or current_diagnostic.diagnostic_result_id
+            != task.diagnostic_result.diagnostic_result_id
+        ):
+            raise PlanConfirmationGuardError(
+                "DIAGNOSTIC_VERSION_CHANGED",
+                "当前诊断结果版本已变化。",
+            )
+        if (
+            task.diagnostic_result.evidence_status != "SUFFICIENT_EVIDENCE"
+            or task.diagnostic_result.diagnostic_result_id
+            != planning.diagnostic_result_id
+            or task.diagnostic_result.diagnostic_result_version
+            != planning.diagnostic_result_version
+        ):
+            raise PlanConfirmationGuardError(
+                "DIAGNOSTIC_VERSION_CHANGED",
+                "当前诊断证据或版本不再允许确认参数候选。",
+            )
+        expected_control = ControlLimitRegistry.snapshot_for(
+            task.versions.rule_set_version
+        )
+        expected_control_payload = {
+            "snapshot_version": expected_control.snapshot_version,
+            "rule_set_version": expected_control.rule_set_version,
+            "center_lower_limit": f"{expected_control.center_lower_limit:.6f}",
+            "corner_lower_limit": f"{expected_control.corner_lower_limit:.6f}",
+            "asymmetry_limit": f"{expected_control.asymmetry_limit:.6f}",
+            "corner_std_limit": f"{expected_control.corner_std_limit:.6f}",
+        }
+        if source.control_limits != expected_control_payload:
+            raise PlanConfirmationGuardError(
+                "CONTROL_LIMIT_SNAPSHOT_CHANGED",
+                "当前控制限快照内容与冻结版本不一致。",
+            )
+        measurement_hash = canonical_measurement_hash(source.measurements)
+        try:
+            features = FeatureEngineer().derive(source.measurements)
+        except FeatureEngineeringError as error:
+            raise PlanConfirmationGuardError(
+                "INPUT_DATA_CHANGED",
+                "当前 Measurement 无法生成有效 DerivedFeatureSet。",
+            ) from error
+        if (
+            measurement_hash != task.data_import.hashes.canonical_observation_hash
+            or features.input_feature_hash
+            != task.diagnostic_result.input_feature_hash
+        ):
+            raise PlanConfirmationGuardError(
+                "INPUT_DATA_CHANGED",
+                "当前 Measurement 或 DerivedFeatureSet 已变化。",
+            )
+        current_parameter_values: dict[str, object] = {}
+        for name in PARAMETER_FIELDS:
+            try:
+                values = sorted(
+                    {
+                        f"{Decimal(row[name]):.6f}"
+                        for row in source.measurements
+                        if name in row
+                    }
+                )
+            except (InvalidOperation, TypeError, ValueError) as error:
+                raise PlanConfirmationGuardError(
+                    "CURRENT_PARAMETER_MISMATCH",
+                    "当前参数值格式无效。",
+                ) from error
+            if len(values) != 1:
+                raise PlanConfirmationGuardError(
+                    "CURRENT_PARAMETER_MISMATCH",
+                    "当前参数值不一致，候选不可确认。",
+                )
+            current_parameter_values[name] = values[0]
+        if candidate.current_values != current_parameter_values:
+            raise PlanConfirmationGuardError(
+                "CURRENT_PARAMETER_MISMATCH",
+                "候选 current_values 与服务端当前参数值不一致。",
+            )
+        current_parameter_hash = canonical_hash(current_parameter_values)
+        source_hashes = {
+            "detection_result": task.anomaly_detection.result_hash,
+            "diagnostic_result": task.diagnostic_result.result_hash,
+            "planning_result": planning.result_hash,
+            "planning_asset_manifest": planning_assets.manifest_hash,
+        }
+        source_hashes.update(
+            {
+                f"diagnostic_asset:{key}": value
+                for key, value in diagnostic_assets.input_asset_hashes.items()
+            }
+        )
+        if self._demo_asset_root is None or self._expected_dataset_manifest_hash is None:
+            raise PlanConfirmationGuardError(
+                "DATASET_ASSETS_MISSING",
+                "确认所需的固定数据资产未装配。",
+            )
+        dataset_raw_path = self._demo_asset_root / "aa-demo-batch.csv"
+        try:
+            dataset_raw_hash = hashlib.sha256(dataset_raw_path.read_bytes()).hexdigest()
+        except FileNotFoundError as error:
+            raise PlanConfirmationGuardError(
+                "DATASET_ASSET_HASH_MISMATCH",
+                "固定观测文件已缺失。",
+            ) from error
+        if dataset_raw_hash != task.data_import.hashes.raw_file_hash:
+            raise PlanConfirmationGuardError(
+                "DATASET_ASSET_HASH_MISMATCH",
+                "固定观测文件内容已变化。",
+            )
+        source_hashes["dataset_manifest"] = self._expected_dataset_manifest_hash
+        source_hashes["dataset_raw"] = dataset_raw_hash
+        if source.manifest is None or source.batch is None:
+            raise PlanConfirmationGuardError(
+                "DATASET_ASSET_HASH_MISMATCH",
+                "已保存的数据 Manifest 或 Batch 绑定已缺失。",
+            )
+        if (
+            source.manifest.get("dataset_manifest_hash")
+            != self._expected_dataset_manifest_hash
+            or source.manifest.get("raw_file_hash")
+            != task.data_import.hashes.raw_file_hash
+            or source.manifest.get("canonical_observation_hash")
+            != task.data_import.hashes.canonical_observation_hash
+            or source.manifest.get("scenario_ref_hash")
+            != task.data_import.hashes.scenario_ref_hash
+            or source.manifest.get("versions", {}).get("dataset_version")
+            != task.versions.dataset_version
+        ):
+            raise PlanConfirmationGuardError(
+                "DATASET_ASSET_HASH_MISMATCH",
+                "持久化 DatasetManifest 脱敏投影与任务输入绑定不一致。",
+            )
+        source_hashes["stored_dataset_manifest"] = canonical_hash(source.manifest)
+        source_hashes["stored_batch"] = canonical_hash(source.batch)
+        retrieval = self._store.get_current_case_retrieval_binding(task.task_id)
+        approved_case_index_version = None
+        if retrieval is None and planning.case_retrieval_result_id is not None:
+            raise PlanConfirmationGuardError(
+                "RETRIEVAL_VERSION_CHANGED",
+                "当前 CaseRetrievalResult 已缺失。",
+            )
+        if retrieval is not None:
+            if self._case_asset_root is None or self._expected_case_manifest_hash is None:
+                self._raise_confirmation_guard(
+                    task,
+                    candidate.candidate_id,
+                    candidate.candidate_hash,
+                    "SUPPORTING_CASE_CHANGED",
+                    "候选引用的受信任案例资产未装配。",
+                )
+            case_manifest, case_asset_hashes = self._confirmation_case_asset_binding()
+            approved_case_index_version = case_manifest["case_index_version"]
+            source_hashes["case_asset_manifest"] = case_asset_hashes["manifest.json"]
+            source_hashes["case_retrieval_result"] = retrieval.result_hash
+            source_hashes["case_retrieval_safe_payload"] = (
+                retrieval.safe_payload_hash
+            )
+            source_hashes["case_collection"] = case_asset_hashes[
+                "approved-cases.json"
+            ]
+            source_hashes["case_index"] = case_asset_hashes["index.json"]
+            if (
+                retrieval.retrieval_result_id != planning.case_retrieval_result_id
+                or retrieval.diagnostic_result_id != planning.diagnostic_result_id
+                or retrieval.retrieval_result_version
+                != CASE_RETRIEVAL_RESULT_VERSION
+                or planning.case_retrieval_result_version
+                != retrieval.retrieval_result_version
+                or retrieval.retrieval_rule_version != RETRIEVAL_RULE_VERSION
+                or retrieval.case_index_version != approved_case_index_version
+                or retrieval.case_index_hash != case_asset_hashes["index.json"]
+                or retrieval.feature_definition_version
+                != planning.feature_definition_version
+            ):
+                raise PlanConfirmationGuardError(
+                    "RETRIEVAL_VERSION_CHANGED",
+                    "当前 CaseRetrievalResult 或案例索引版本已变化。",
+                )
+            for case_id in candidate.supporting_case_ids:
+                case_hash = retrieval.case_content_hashes.get(case_id)
+                if case_hash is None:
+                    self._raise_confirmation_guard(
+                        task,
+                        candidate.candidate_id,
+                        candidate.candidate_hash,
+                        "SUPPORTING_CASE_CHANGED",
+                        "候选引用的 supporting case 已缺失。",
+                    )
+                source_hashes[f"supporting_case:{case_id}"] = case_hash
+        case_index_hash = None if retrieval is None else retrieval.case_index_hash
+        case_asset_manifest_hash = (
+            None
+            if retrieval is None
+            else source_hashes["case_asset_manifest"]
+        )
+        input_bindings = {
+            "task_id": task.task_id,
+            "diagnostic_result_id": current_diagnostic.diagnostic_result_id,
+            "diagnostic_result_hash": current_diagnostic.result_hash,
+            "case_retrieval_result_id": (
+                None if retrieval is None else retrieval.retrieval_result_id
+            ),
+            "case_retrieval_result_hash": (
+                None if retrieval is None else retrieval.result_hash
+            ),
+            "measurement_hash": measurement_hash,
+            "feature_hash": features.input_feature_hash,
+            "parameter_constraint_snapshot_hash": parameter_snapshot_file_hash,
+            "planning_asset_manifest_hash": planning_assets.manifest_hash,
+            "case_index_hash": case_index_hash,
+            "case_asset_manifest_hash": case_asset_manifest_hash,
+            "historical_case_ids": (
+                () if retrieval is None else retrieval.ordered_case_ids
+            ),
+        }
+        if planning.input_hash != parameter_planning_input_hash(input_bindings):
+            raise PlanConfirmationGuardError(
+                "PLANNING_RESULT_STALE",
+                "当前诊断、案例检索、Measurement 或资产绑定与规划输入不一致。",
+            )
+        binding = FreshnessBinding(
+            input_data_version=task.versions.dataset_version,
+            input_measurement_hash=measurement_hash,
+            current_parameter_hash=current_parameter_hash,
+            detection_result_id=task.anomaly_detection.detection_result_id,
+            detection_result_version=DETECTION_RESULT_VERSION,
+            diagnostic_result_id=task.diagnostic_result.diagnostic_result_id,
+            diagnostic_result_version=task.diagnostic_result.diagnostic_result_version,
+            case_retrieval_result_id=(
+                None if retrieval is None else retrieval.retrieval_result_id
+            ),
+            case_retrieval_result_version=(
+                None if retrieval is None else CASE_RETRIEVAL_RESULT_VERSION
+            ),
+            planning_result_id=planning.planning_result_id,
+            planning_result_version=planning.planning_result_version,
+            candidate_hash=candidate.candidate_hash,
+            control_limit_snapshot_version=source.control_limits["snapshot_version"],
+            control_limit_snapshot_hash=canonical_hash(source.control_limits),
+            parameter_constraint_snapshot_version=snapshot.snapshot_version,
+            parameter_constraint_snapshot_hash=canonical_hash(
+                source.parameter_constraints
+            ),
+            direction_rule_version=planning.direction_rule_version,
+            safety_rule_version=planning.safety_rule_version,
+            planning_rule_version=planning.planning_rule_version,
+            rule_set_version=planning.rule_set_version,
+            feature_definition_version=planning.feature_definition_version,
+            model_version=task.diagnostic_result.model_version,
+            preprocessing_version=task.diagnostic_result.preprocessing_version,
+            approved_case_index_version=approved_case_index_version,
+            source_asset_hashes=dict(sorted(source_hashes.items())),
+        )
+        return binding, snapshot, planning_assets
+
+    def _confirmation_file_asset_token(self, *, include_case_assets: bool) -> str:
+        if (
+            self._planning_asset_root is None
+            or self._expected_planning_manifest_hash is None
+            or self._diagnostic_asset_root is None
+            or self._expected_diagnostic_manifest_hash is None
+            or self._demo_asset_root is None
+            or self._expected_dataset_manifest_hash is None
+        ):
+            raise PlanConfirmationGuardError(
+                "ASSET_HASH_MISMATCH",
+                "确认所需的受信任文件资产未完整装配。",
+            )
+        planning_assets = ParameterPlanningAssetLoader(
+            self._planning_asset_root,
+            self._expected_planning_manifest_hash,
+        ).load()
+        diagnostic_assets = DiagnosticAssetLoader(
+            self._diagnostic_asset_root,
+            self._expected_diagnostic_manifest_hash,
+        ).load()
+        dataset_raw_hash = hashlib.sha256(
+            (self._demo_asset_root / "aa-demo-batch.csv").read_bytes()
+        ).hexdigest()
+        public_assets = self._asset_loader.load()
+        payload: dict[str, object] = {
+            "public_actor": asdict(public_assets.actor),
+            "public_versions": asdict(public_assets.versions),
+            "planning_manifest": planning_assets.manifest_hash,
+            "diagnostic_assets": diagnostic_assets.input_asset_hashes,
+            "dataset_manifest": self._expected_dataset_manifest_hash,
+            "dataset_raw": dataset_raw_hash,
+        }
+        if include_case_assets:
+            case_manifest, case_hashes = self._confirmation_case_asset_binding()
+            payload["case_manifest"] = case_manifest["case_index_version"]
+            payload["case_assets"] = case_hashes
+        return canonical_hash(payload)
+
+    def _confirmation_case_asset_binding(
+        self,
+    ) -> tuple[dict[str, object], dict[str, str]]:
+        if self._case_asset_root is None or self._expected_case_manifest_hash is None:
+            raise CaseRetrievalAssetError(
+                "CASE_ASSETS_MISSING",
+                "候选引用的受信任案例资产未装配。",
+            )
+        try:
+            manifest_bytes = (self._case_asset_root / "manifest.json").read_bytes()
+            manifest = json.loads(manifest_bytes)
+        except FileNotFoundError as error:
+            raise CaseRetrievalAssetError(
+                "CASE_MANIFEST_MISSING",
+                "案例资产 Manifest 已缺失。",
+            ) from error
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise CaseRetrievalAssetError(
+                "CASE_MANIFEST_INVALID",
+                "案例资产 Manifest 格式无效。",
+            ) from error
+        manifest_hash = hashlib.sha256(manifest_bytes).hexdigest()
+        files = manifest.get("files") if isinstance(manifest, dict) else None
+        if (
+            manifest_hash != self._expected_case_manifest_hash
+            or not isinstance(files, dict)
+            or manifest.get("case_index_version") != CASE_INDEX_VERSION
+            or manifest.get("case_schema_version") != CASE_SCHEMA_VERSION
+            or manifest.get("scaler_version") != SCALER_VERSION
+            or manifest.get("compatibility_rule_version")
+            != COMPATIBILITY_RULE_VERSION
+            or manifest.get("retrieval_rule_version") != RETRIEVAL_RULE_VERSION
+            or manifest.get("feature_definition_version")
+            != FEATURE_DEFINITION_VERSION
+        ):
+            raise CaseRetrievalAssetError(
+                "CASE_MANIFEST_HASH_MISMATCH",
+                "案例资产 Manifest 内容、版本或哈希不匹配。",
+            )
+        hashes = {"manifest.json": manifest_hash}
+        for name in ApprovedCaseAssetLoader.REQUIRED_FILES:
+            try:
+                content = (self._case_asset_root / name).read_bytes()
+            except FileNotFoundError as error:
+                raise CaseRetrievalAssetError(
+                    "CASE_ASSET_MISSING",
+                    f"案例资产已缺失：{name}",
+                ) from error
+            actual_hash = hashlib.sha256(content).hexdigest()
+            if files.get(name) != actual_hash:
+                raise CaseRetrievalAssetError(
+                    "CASE_ASSET_HASH_MISMATCH",
+                    f"案例资产内容哈希不匹配：{name}",
+                )
+            hashes[name] = actual_hash
+        if manifest.get("case_collection_hash") != hashes["approved-cases.json"]:
+            raise CaseRetrievalAssetError(
+                "CASE_ASSET_HASH_MISMATCH",
+                "案例集合内容哈希与 Manifest 不一致。",
+            )
+        return manifest, hashes
+
+    def _refresh_confirmed_plan(self, task: Task) -> Task:
+        plan = task.confirmed_plan
+        if plan is None or plan.status == "STALE":
+            return task
+        reasons: tuple[str, ...] = ()
+        try:
+            current_detection = self._store.get_current_detection(task.task_id)
+            current_diagnostic = self._store.get_current_diagnostic(task.task_id)
+            planning = self._store.get_current_parameter_planning(task.task_id)
+        except DetectionGuardError:
+            reasons = ("ASSET_HASH_MISMATCH",)
+            current_detection = None
+            current_diagnostic = None
+            planning = None
+        except DiagnosticGuardError:
+            reasons = ("DIAGNOSTIC_VERSION_CHANGED",)
+            current_detection = None
+            current_diagnostic = None
+            planning = None
+        except ParameterPlanningGuardError:
+            reasons = ("PLANNING_VERSION_CHANGED",)
+            current_detection = None
+            current_diagnostic = None
+            planning = None
+        if reasons:
+            pass
+        elif (
+            current_detection is None
+            or current_detection.detection_result_id != plan.detection_result_id
+        ):
+            reasons = ("DETECTION_VERSION_CHANGED",)
+        elif (
+            current_diagnostic is None
+            or current_diagnostic.diagnostic_result_id != plan.diagnostic_result_id
+        ):
+            reasons = ("DIAGNOSTIC_VERSION_CHANGED",)
+        elif planning is None:
+            reasons = ("PLANNING_VERSION_CHANGED",)
+        else:
+            candidate = next(
+                (
+                    item
+                    for item in planning.ordered_candidates
+                    if item.candidate_id == plan.candidate_id
+                ),
+                None,
+            )
+            if candidate is None:
+                reasons = ("CANDIDATE_HASH_CHANGED",)
+            else:
+                try:
+                    binding, _snapshot, _assets = self._confirmation_binding(
+                        task, planning, candidate
+                    )
+                    evaluation = ConfirmedPlanFreshnessEvaluator().evaluate(
+                        plan, binding
+                    )
+                    reasons = evaluation.stale_reason_codes
+                except ParameterPlanningAssetError:
+                    reasons = ("RULE_VERSION_CHANGED",)
+                except CaseRetrievalAssetError:
+                    reasons = ("SUPPORTING_CASE_CHANGED",)
+                except CaseRetrievalGuardError:
+                    reasons = ("RETRIEVAL_VERSION_CHANGED",)
+                except ConfirmationStateChangedError:
+                    reasons = ("ASSET_HASH_MISMATCH",)
+                except ParameterPlanningGuardError:
+                    reasons = ("ASSET_HASH_MISMATCH",)
+                except PlanConfirmationGuardError as error:
+                    reasons = {
+                        "CONTROL_LIMIT_SNAPSHOT_CHANGED": (
+                            "CONTROL_LIMIT_SNAPSHOT_CHANGED",
+                        ),
+                        "DETECTION_VERSION_CHANGED": (
+                            "DETECTION_VERSION_CHANGED",
+                        ),
+                        "DIAGNOSTIC_VERSION_CHANGED": (
+                            "DIAGNOSTIC_VERSION_CHANGED",
+                        ),
+                        "INPUT_DATA_CHANGED": ("INPUT_DATA_CHANGED",),
+                        "CURRENT_PARAMETER_MISMATCH": (
+                            "CURRENT_PARAMETER_CHANGED",
+                        ),
+                        "PARAMETER_CONSTRAINT_SNAPSHOT_CHANGED": (
+                            "PARAMETER_CONSTRAINT_SNAPSHOT_CHANGED",
+                        ),
+                        "RETRIEVAL_VERSION_CHANGED": (
+                            "RETRIEVAL_VERSION_CHANGED",
+                        ),
+                        "RULE_VERSION_CHANGED": ("RULE_VERSION_CHANGED",),
+                    }.get(error.code, ("ASSET_HASH_MISMATCH",))
+                except (KeyError, TypeError, ValueError, InvalidOperation):
+                    reasons = ("ASSET_HASH_MISMATCH",)
+        if not reasons:
+            return task
+        stale_plan = replace(
+            plan,
+            status="STALE",
+            stale_reason_codes=tuple(dict.fromkeys(reasons)),
+        )
+        stale_task = replace(task, confirmed_plan=stale_plan)
+        return self._store.mark_confirmed_plan_stale(stale_task, stale_plan)
+
+    def _raise_confirmation_guard(
+        self,
+        task: Task,
+        candidate_id: str | None,
+        candidate_hash: str | None,
+        code: str,
+        message: str,
+        *,
+        status_code: int = 409,
+        expected_hash: str | None = None,
+        actual_hash: str | None = None,
+        expected_version: str | None = None,
+        actual_version: str | None = None,
+    ) -> Never:
+        error = PlanConfirmationGuardError(
+            code,
+            message,
+            status_code,
+            expected_hash=expected_hash,
+            actual_hash=actual_hash,
+            expected_version=expected_version,
+            actual_version=actual_version,
+        )
+        self._record_confirmation_rejection(
+            task,
+            candidate_id,
+            candidate_hash,
+            error,
+            expected_version=expected_version,
+            actual_version=actual_version,
+        )
+        raise error
+
+    def _record_confirmation_rejection(
+        self,
+        task: Task,
+        candidate_id: str | None,
+        candidate_hash: str | None,
+        error: PlanConfirmationGuardError,
+        *,
+        expected_version: str | None = None,
+        actual_version: str | None = None,
+    ) -> None:
+        try:
+            planning = self._store.get_current_parameter_planning(task.task_id)
+        except ParameterPlanningGuardError:
+            planning = task.parameter_planning_result
+        event = create_audit_event(
+            task_id=task.task_id,
+            actor_id=task.actor.actor_id,
+            actor_role=task.actor.actor_role,
+            display_name=task.actor.display_name,
+            occurred_at=self._clock.now(),
+            result="REJECTED",
+            rule_set_version=task.versions.rule_set_version,
+            candidate_id=candidate_id,
+            candidate_hash=candidate_hash,
+            planning_result_id=(
+                None if planning is None else planning.planning_result_id
+            ),
+            planning_result_version=(
+                None if planning is None else planning.planning_result_version
+            ),
+            rejection_code=error.code,
+            expected_hash=error.expected_hash,
+            actual_hash=error.actual_hash,
+            expected_version=expected_version or error.expected_version,
+            actual_version=actual_version or error.actual_version,
+        )
+        self._store.append_audit_event(event)
+
     def _raise_planning_guard(
         self,
         task: Task,
@@ -1258,7 +2376,11 @@ class TaskService:
             historical_cases, case_index_hash, case_asset_manifest_hash = self._planning_cases(
                 task, retrieval
             )
-        except (ParameterPlanningAssetError, ParameterPlanningGuardError) as error:
+        except (
+            ParameterPlanningAssetError,
+            ParameterPlanningGuardError,
+            CaseRetrievalAssetError,
+        ) as error:
             self._raise_planning_guard(
                 task,
                 current.diagnostic_result_id,

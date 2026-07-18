@@ -23,6 +23,7 @@ from .parameter_planning import (
     ParameterPlanningAssetError,
     ParameterPlanningGuardError,
 )
+from .plan_confirmation import PlanConfirmationGuardError
 from .service import PlanningBoundaryAudit, TaskService
 from .importing import ImportValidationError
 from .store import TaskStore
@@ -53,6 +54,12 @@ class ParameterPlanningRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     diagnostic_result_id: str
     case_retrieval_result_id: str | None = None
+
+
+class PlanConfirmationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    candidate_id: str
+    candidate_hash: str
 
 
 def create_app(
@@ -208,6 +215,25 @@ def create_app(
             },
         )
 
+    @app.exception_handler(PlanConfirmationGuardError)
+    async def handle_plan_confirmation_guard_error(
+        _request: Request,
+        error: PlanConfirmationGuardError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={
+                "error": {
+                    "code": error.code,
+                    "message": error.message,
+                    "expected_hash": error.expected_hash,
+                    "actual_hash": error.actual_hash,
+                    "expected_version": error.expected_version,
+                    "actual_version": error.actual_version,
+                }
+            },
+        )
+
     @app.exception_handler(RequestValidationError)
     async def handle_request_validation_error(
         request: Request,
@@ -289,6 +315,46 @@ def create_app(
                     }
                 },
             )
+        if request.url.path.endswith("/confirmed-plans"):
+            body = error.body if isinstance(error.body, dict) else {}
+            if any(
+                item.get("type") == "extra_forbidden" for item in error.errors()
+            ):
+                forbidden_fields = tuple(
+                    sorted(
+                        str(item["loc"][-1])
+                        for item in error.errors()
+                        if item.get("type") == "extra_forbidden"
+                    )
+                )
+                structured = service.record_confirmation_request_refusal(
+                    request.path_params["task_id"],
+                    body.get("candidate_id"),
+                    body.get("candidate_hash"),
+                    forbidden_fields,
+                )
+                return JSONResponse(
+                    status_code=structured.status_code,
+                    content={
+                        "error": {
+                            "code": structured.code,
+                            "message": structured.message,
+                            "expected_hash": None,
+                            "actual_hash": None,
+                            "expected_version": None,
+                            "actual_version": ",".join(forbidden_fields),
+                        }
+                    },
+                )
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error": {
+                        "code": "CONFIRMATION_REQUEST_INVALID",
+                        "message": "确认请求必须提交 candidate_id 与 candidate_hash。",
+                    }
+                },
+            )
         return JSONResponse(
             status_code=422,
             content={"detail": jsonable_encoder(error.errors())},
@@ -356,6 +422,28 @@ def create_app(
         finally:
             boundary_audit.assert_pristine()
         return {"task": asdict(task), "planning": asdict(planning)}
+
+    @app.post("/api/tasks/{task_id}/confirmed-plans")
+    def confirm_parameter_plan(
+        task_id: str,
+        request: PlanConfirmationRequest,
+    ) -> dict:
+        boundary_audit.assert_pristine()
+        try:
+            task, plan = service.confirm_parameter_plan(
+                task_id,
+                request.candidate_id,
+                request.candidate_hash,
+            )
+        finally:
+            boundary_audit.assert_pristine()
+        return {"task": asdict(task), "confirmed_plan": asdict(plan)}
+
+    @app.get("/api/tasks/{task_id}/audit-events")
+    def get_audit_events(task_id: str) -> dict:
+        if not service.has_task(task_id):
+            raise HTTPException(status_code=404, detail="调机任务不存在。")
+        return {"audit_events": [asdict(item) for item in service.get_audit_events(task_id)]}
 
     if static_root is not None:
         app.mount("/", StaticFiles(directory=static_root, html=True), name="frontend")

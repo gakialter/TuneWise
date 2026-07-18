@@ -545,6 +545,70 @@ function planningResponse(refused = false) {
   };
 }
 
+function confirmedPlanResponse(status: "VALID" | "STALE" = "VALID") {
+  const planned = planningResponse();
+  const candidate = planned.planning.ordered_candidates[0];
+  const confirmedPlan = {
+    confirmed_plan_id: "tw-confirmed-plan-fixed",
+    confirmed_plan_version: "tw-confirmed-plan-v1",
+    confirmed_plan_hash: "c".repeat(64),
+    task_id: planned.task.task_id,
+    planning_result_id: planned.planning.planning_result_id,
+    planning_result_version: planned.planning.planning_result_version,
+    candidate_id: candidate.candidate_id,
+    candidate_hash: candidate.candidate_hash,
+    current_values: candidate.current_values,
+    proposed_values: candidate.proposed_values,
+    deltas: candidate.deltas,
+    delta_ticks: candidate.delta_ticks,
+    parameter_family: candidate.parameter_family,
+    root_cause: candidate.root_cause,
+    generation_type: candidate.generation_type,
+    supporting_case_ids: candidate.supporting_case_ids,
+    direction_evidence_hashes: ["d".repeat(64)],
+    actor_id: "demo-aa-engineer",
+    actor_role: "AA_PROCESS_ENGINEER",
+    display_name: "AA工艺工程师",
+    confirmed_at: "2026-07-19T08:04:00.000000Z",
+    status,
+    stale_reason_codes: status === "STALE" ? ["INPUT_DATA_CHANGED"] : [],
+    freshness_rule_version: "tw-confirmed-plan-freshness-v1",
+    input_data_version: "tw-dataset-v1",
+    input_measurement_hash: "1".repeat(64),
+    current_parameter_hash: "2".repeat(64),
+    detection_result_id: "tw-detection-fixed",
+    detection_result_version: "tw-anomaly-detection-result-v1",
+    diagnostic_result_id: "tw-diagnostic-fixed",
+    diagnostic_result_version: "tw-diagnostic-result-v1",
+    case_retrieval_result_id: "tw-case-retrieval-fixed",
+    case_retrieval_result_version: "tw-case-retrieval-result-v1",
+    control_limit_snapshot_version: "tw-control-limits-v1",
+    control_limit_snapshot_hash: "3".repeat(64),
+    parameter_constraint_snapshot_version: "tw-parameter-constraints-v1",
+    parameter_constraint_snapshot_hash: "4".repeat(64),
+    direction_rule_version: "tw-direction-rules-v1",
+    safety_rule_version: "tw-parameter-safety-v1",
+    planning_rule_version: "tw-parameter-planning-v1",
+    rule_set_version: "tw-rules-v1",
+    feature_definition_version: "tw-feature-definition-v1",
+    model_version: "tw-model-v1",
+    preprocessing_version: "tw-preprocessing-v1",
+    approved_case_index_version: "tw-approved-case-index-v1",
+    source_asset_hashes: { planning_asset_manifest: "5".repeat(64) },
+    created_at: "2026-07-19T08:04:00.000000Z",
+  };
+  const task = {
+    ...planned.task,
+    status: "PLAN_CONFIRMED",
+    stages: stages.map((stage, index) => ({
+      ...stage,
+      availability: index < 5 ? "completed" : index === 5 ? "current" : "locked",
+    })),
+    confirmed_plan: confirmedPlan,
+  };
+  return { task, confirmed_plan: confirmedPlan };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -1195,7 +1259,7 @@ test("generates and displays three read-only safety-constrained candidates", asy
   expect(screen.getAllByText(/候选哈希/)).toHaveLength(3);
   expect(screen.getByText(/结果哈希/)).toBeTruthy();
   expect(screen.queryByText(/最优参数|最佳方案|预测最优|自动写入|已执行/)).toBeNull();
-  expect(screen.queryByRole("button", { name: /确认|采纳|执行/ })).toBeNull();
+  expect(screen.getByRole("button", { name: "人工确认候选方案" })).toBeTruthy();
   expect(fetchMock).toHaveBeenLastCalledWith(
     "/api/tasks/tw-demo-task-001/parameter-plans",
     {
@@ -1322,4 +1386,156 @@ test("renders structured parameter planning errors without replacing diagnosis",
   expect(await screen.findByText("参数规划规则资产内容哈希不匹配。")).toBeTruthy();
   expect(screen.getByText("PLANNING_ASSET_HASH_MISMATCH")).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
+});
+
+test("selects one passed candidate and confirms only its identity with loading feedback", async () => {
+  let resolveConfirmation: (response: Response) => void = () => undefined;
+  const pending = new Promise<Response>((resolve) => {
+    resolveConfirmation = resolve;
+  });
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(planningResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockReturnValueOnce(pending);
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  const confirm = await screen.findByRole("button", { name: "人工确认候选方案" });
+  expect((confirm as HTMLButtonElement).disabled).toBe(true);
+  const candidate = screen.getByRole("radio", { name: /CONSERVATIVE/ });
+  fireEvent.click(candidate);
+  expect((candidate as HTMLInputElement).checked).toBe(true);
+  expect((confirm as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(confirm);
+  expect(await screen.findByText("正在冻结候选并执行服务端安全复核…")).toBeTruthy();
+  expect((confirm as HTMLButtonElement).disabled).toBe(true);
+  resolveConfirmation(
+    new Response(JSON.stringify(confirmedPlanResponse()), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+
+  expect(await screen.findByText("方案已人工确认并冻结")).toBeTruthy();
+  expect(screen.getAllByText("PLAN_CONFIRMED").length).toBeGreaterThan(0);
+  expect(screen.getByText(/尚未进行模拟回放/)).toBeTruthy();
+  expect(screen.getByText(/未向真实设备写入任何参数/)).toBeTruthy();
+  expect(screen.getByText(/确认方案哈希/)).toBeTruthy();
+  expect(fetchMock).toHaveBeenLastCalledWith(
+    "/api/tasks/tw-demo-task-001/confirmed-plans",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        candidate_id: "tw-parameter-candidate-conservative",
+        candidate_hash: "1".repeat(64),
+      }),
+    },
+  );
+});
+
+test("shows structured confirmation tamper or conflict error inline", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(planningResponse().task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "CANDIDATE_HASH_MISMATCH",
+              message: "请求 candidate_hash 与服务端当前候选不一致。",
+            },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+  );
+
+  render(<App />);
+  const selected = await screen.findByRole("radio", { name: /STANDARD/ });
+  fireEvent.click(selected);
+  fireEvent.click(screen.getByRole("button", { name: "人工确认候选方案" }));
+
+  expect(
+    await screen.findByText("请求 candidate_hash 与服务端当前候选不一致。"),
+  ).toBeTruthy();
+  expect(screen.getByText("CANDIDATE_HASH_MISMATCH")).toBeTruthy();
+  expect((selected as HTMLInputElement).disabled).toBe(true);
+  expect(screen.getByText("该候选已失效")).toBeTruthy();
+  expect(
+    (screen.getByRole("button", { name: "人工确认候选方案" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+test("disables the whole confirmation context after a planning-level stale error", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(planningResponse().task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "PLANNING_RESULT_STALE",
+              message: "当前参数规划结果已过期。",
+            },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+  );
+
+  render(<App />);
+  const selected = await screen.findByRole("radio", { name: /STANDARD/ });
+  fireEvent.click(selected);
+  fireEvent.click(screen.getByRole("button", { name: "人工确认候选方案" }));
+
+  expect(await screen.findByText("当前参数规划结果已过期。")).toBeTruthy();
+  for (const radio of screen.getAllByRole("radio")) {
+    expect((radio as HTMLInputElement).disabled).toBe(true);
+  }
+  expect(
+    (screen.getByRole("button", { name: "人工确认候选方案" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+test("renders persisted stale confirmed plan as permanently unavailable", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify(confirmedPlanResponse("STALE").task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
+
+  render(<App />);
+
+  expect(
+    await screen.findByText("方案已过期，需要重新生成并确认"),
+  ).toBeTruthy();
+  expect(screen.getByText("INPUT_DATA_CHANGED")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "人工确认候选方案" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /回放|执行|写入设备/ })).toBeNull();
 });
