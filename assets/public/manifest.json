@@ -1,0 +1,7 @@
+{
+  "manifest_version": "1",
+  "public_asset_version": "tw-public-v1",
+  "files": {
+    "version.json": "51aa2d41bef29d7c58c9b3634734f961b4bef128d7640f5680984d43344838cf"
+  }
+}

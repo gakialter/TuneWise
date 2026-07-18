@@ -5,6 +5,7 @@ build/
 .venv/
 **pycache**/
 *.pyc
+*.tsbuildinfo
 .env
 .env.*
 !.env.example
@@ -15,3 +16,4 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+var/

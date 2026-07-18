@@ -1,0 +1,16 @@
+{
+  "public_asset_version": "tw-public-v1",
+  "application_version": "0.1.0",
+  "dataset_version": "tw-dataset-v1",
+  "schema_version": "tw-schema-v1",
+  "rule_set_version": "tw-rules-v1",
+  "model_version": "tw-model-v1",
+  "preprocessing_version": "tw-preprocessing-v1",
+  "evaluation_rule_version": "tw-evaluation-v1",
+  "canonicalizer_version": "tw-canonicalizer-v1",
+  "actor": {
+    "actor_id": "demo-aa-engineer",
+    "actor_role": "AA_PROCESS_ENGINEER",
+    "display_name": "AA工艺工程师"
+  }
+}
