@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from dataclasses import replace
+import hashlib
+import json
+from dataclasses import asdict, dataclass, replace
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from .assets import AssetIntegrityError, PublicAssetLoader
+from .case_retrieval import (
+    ApprovedCaseAssetLoader,
+    CaseRetrievalAssetError,
+    CaseRetrievalGuardError,
+    CaseRetrievalResultRecord,
+    StructuredCaseRetriever,
+    record_case_retrieval,
+)
 from .domain import Task, TaskStatus, workflow_for
 from .detection import (
     AnomalyDetectionRecord,
@@ -27,11 +36,18 @@ from .diagnosis import (
     DiagnosticAssetLoader,
     DiagnosticGuardError,
     DiagnosticResultRecord,
+    FeatureEngineeringError,
     FeatureEngineer,
     RootCauseDiagnoser,
     record_diagnosis,
 )
+from .diagnostic_contract import (
+    DIAGNOSTIC_RESULT_VERSION,
+    EVIDENCE_RULE_VERSION,
+    FEATURE_DEFINITION_VERSION,
+)
 from .store import (
+    CaseRetrievalResultConflictError,
     DiagnosticResultConflictError,
     DetectionResultConflictError,
     ImportSnapshotConflictError,
@@ -57,6 +73,8 @@ class TaskService:
         clock: SystemClock | None = None,
         diagnostic_asset_root: Path | None = None,
         expected_diagnostic_manifest_hash: str | None = None,
+        case_asset_root: Path | None = None,
+        expected_case_manifest_hash: str | None = None,
     ) -> None:
         self._asset_loader = asset_loader
         self._store = store
@@ -66,6 +84,8 @@ class TaskService:
         self._clock = clock or SystemClock()
         self._diagnostic_asset_root = diagnostic_asset_root
         self._expected_diagnostic_manifest_hash = expected_diagnostic_manifest_hash
+        self._case_asset_root = case_asset_root
+        self._expected_case_manifest_hash = expected_case_manifest_hash
 
     def create_initial_task(self) -> Task:
         assets = self._asset_loader.load()
@@ -333,6 +353,190 @@ class TaskService:
                 "DIAGNOSTIC_RESULT_CONFLICT",
                 "当前任务的诊断结果已发生冲突。",
             ) from error
+
+    def retrieve_approved_cases(
+        self,
+        task_id: str,
+        diagnostic_result_id: str,
+        top_k: int,
+    ) -> tuple[Task, CaseRetrievalResultRecord]:
+        public_assets = self._asset_loader.load()
+        task = self._store.get(task_id)
+        if task is None:
+            raise CaseRetrievalGuardError("TASK_NOT_FOUND", "调机任务不存在。", 404)
+        if task.actor != public_assets.actor or task.versions != public_assets.versions:
+            raise AssetIntegrityError(
+                "TASK_ASSET_SNAPSHOT_MISMATCH",
+                "任务绑定的公共版本快照与当前资产不一致。",
+            )
+        if task.status is not TaskStatus.DIAGNOSED:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_TASK_STATE_INVALID",
+                "只有 DIAGNOSED 任务可以检索已审核案例。",
+            )
+        diagnostic = task.diagnostic_result
+        if diagnostic is None:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_DIAGNOSTIC_MISSING",
+                "当前任务缺少最新诊断结果。",
+            )
+        if diagnostic.diagnostic_result_id != diagnostic_result_id:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_DIAGNOSTIC_STALE",
+                "请求的诊断结果不是当前任务最新版本。",
+            )
+        self._validate_diagnostic_for_retrieval(task, diagnostic)
+        data_import = task.data_import
+        if data_import is None:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_BATCH_MISSING", "当前任务缺少已导入 Batch。"
+            )
+        measurements = self._store.get_observable_measurements(task_id)
+        try:
+            current_observation_hash = canonical_measurement_hash(measurements)
+        except DetectionGuardError as error:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_QUERY_INPUT_INVALID",
+                "当前可观测 Measurement 无法按冻结契约规范化。",
+                error.status_code,
+            ) from error
+        if current_observation_hash != data_import.hashes.canonical_observation_hash:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_QUERY_INPUT_HASH_MISMATCH",
+                "当前可观测 Measurement 与诊断输入数据版本不一致。",
+            )
+        try:
+            query_features = FeatureEngineer().derive(measurements)
+        except FeatureEngineeringError as error:
+            code = (
+                "CASE_QUERY_FEATURE_MISSING"
+                if error.code == "DIAGNOSTIC_FEATURE_MISSING"
+                else "CASE_QUERY_FEATURE_NON_FINITE"
+                if error.code == "DIAGNOSTIC_FEATURE_NON_FINITE"
+                else "CASE_QUERY_FEATURE_INVALID"
+            )
+            raise CaseRetrievalGuardError(code, error.message) from error
+        if query_features.input_feature_hash != diagnostic.input_feature_hash:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_QUERY_FEATURE_STALE",
+                "当前 DerivedFeatureSet 与诊断输入版本不一致。",
+            )
+        if (
+            self._case_asset_root is None
+            or self._expected_case_manifest_hash is None
+        ):
+            raise CaseRetrievalAssetError(
+                "CASE_ASSETS_MISSING", "固定 APPROVED 案例检索资产未装配。"
+            )
+        case_assets = ApprovedCaseAssetLoader(
+            self._case_asset_root,
+            self._expected_case_manifest_hash,
+        ).load()
+        if case_assets.manifest.get("rule_set_version") != task.versions.rule_set_version:
+            raise CaseRetrievalAssetError(
+                "CASE_ASSET_RULE_VERSION_STALE",
+                "案例索引绑定的规则版本不是任务当前版本。",
+            )
+        top3_root_causes = tuple(
+            candidate.root_cause for candidate in diagnostic.ordered_top3
+        )
+        decision = StructuredCaseRetriever(case_assets).retrieve(
+            query_features=query_features,
+            product_model=data_import.product_model,
+            top3_root_causes=top3_root_causes,
+            top_k=top_k,
+        )
+        record = record_case_retrieval(
+            decision,
+            task_id=task.task_id,
+            diagnostic_result_id=diagnostic.diagnostic_result_id,
+            ordered_top3_root_causes=top3_root_causes,
+            created_at=self._clock.now(),
+        )
+        try:
+            return self._store.save_case_retrieval(task, record)
+        except CaseRetrievalResultConflictError as error:
+            current = self._store.get_current_case_retrieval(task_id)
+            if (
+                current is not None
+                and current.retrieval_result_id == record.retrieval_result_id
+                and current.result_hash == record.result_hash
+            ):
+                stored_task = self._store.get(task_id)
+                if stored_task is not None:
+                    return stored_task, current
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_RESULT_CONFLICT",
+                "当前任务的案例检索结果已发生冲突。",
+            ) from error
+
+    @staticmethod
+    def _validate_diagnostic_for_retrieval(
+        task: Task,
+        diagnostic: DiagnosticResultRecord,
+    ) -> None:
+        detection = task.anomaly_detection
+        if detection is None or diagnostic.detection_result_id != detection.detection_result_id:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_DIAGNOSTIC_STALE",
+                "诊断结果引用的异常检测不是当前版本。",
+            )
+        data_import = task.data_import
+        if data_import is None:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_BATCH_MISSING", "当前任务缺少已导入 Batch。"
+            )
+        if (
+            detection.input_data_version != task.versions.dataset_version
+            or detection.input_hash
+            != data_import.hashes.canonical_observation_hash
+            or detection.rule_set_version != task.versions.rule_set_version
+            or detection.control_limit_snapshot_version
+            != data_import.snapshot_versions.control_limit_snapshot
+        ):
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_DIAGNOSTIC_STALE",
+                "诊断引用的检测结果与当前可观测输入或版本快照不一致。",
+            )
+        if diagnostic.anomaly_result != AnomalyResult.TARGET_ANOMALY.value:
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_ANOMALY_NOT_TARGET",
+                "只有 TARGET_ANOMALY 诊断结果可以检索案例。",
+            )
+        if (
+            diagnostic.diagnostic_result_version != DIAGNOSTIC_RESULT_VERSION
+            or diagnostic.task_id != task.task_id
+            or diagnostic.input_data_version != task.versions.dataset_version
+            or diagnostic.model_version != task.versions.model_version
+            or diagnostic.preprocessing_version != task.versions.preprocessing_version
+            or diagnostic.feature_definition_version != FEATURE_DEFINITION_VERSION
+            or diagnostic.evidence_rule_version != EVIDENCE_RULE_VERSION
+        ):
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_DIAGNOSTIC_VERSION_STALE",
+                "当前诊断结果的输入、模型或特征定义版本已过期。",
+            )
+        business_payload = asdict(diagnostic)
+        business_payload.pop("diagnostic_result_id")
+        business_payload.pop("result_hash")
+        business_payload.pop("created_at")
+        expected_hash = hashlib.sha256(
+            json.dumps(
+                business_payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        if (
+            diagnostic.result_hash != expected_hash
+            or diagnostic.diagnostic_result_id
+            != f"tw-diagnostic-{expected_hash[:16]}"
+        ):
+            raise CaseRetrievalGuardError(
+                "CASE_RETRIEVAL_DIAGNOSTIC_INVALID",
+                "当前诊断结果内容哈希无效。",
+            )
 
     def _validated_detection_input(
         self,

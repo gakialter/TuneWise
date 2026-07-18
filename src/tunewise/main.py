@@ -12,6 +12,9 @@ EXPECTED_DATASET_MANIFEST_HASH = (
 EXPECTED_DIAGNOSTIC_MANIFEST_HASH = (
     "d2d287fcd830771c3b8c6e91f41152d950ea2a02820107c1ca802fb268b5ed4b"
 )
+EXPECTED_CASE_MANIFEST_HASH = (
+    "5cc047c8b71cab297b8fca614976e9ce98e6b0bfd7a5c29876780410d74c4dc7"
+)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -25,6 +28,8 @@ def create_production_app(repository_root: Path = REPOSITORY_ROOT):
         expected_dataset_manifest_hash=EXPECTED_DATASET_MANIFEST_HASH,
         diagnostic_asset_root=repository_root / "assets" / "diagnostic" / "tw-diagnostic-v1",
         expected_diagnostic_manifest_hash=EXPECTED_DIAGNOSTIC_MANIFEST_HASH,
+        case_asset_root=repository_root / "assets" / "cases" / "tw-approved-case-index-v1",
+        expected_case_manifest_hash=EXPECTED_CASE_MANIFEST_HASH,
     )
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -11,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 
 from .assets import AssetIntegrityError, PublicAssetLoader
+from .case_retrieval import CaseRetrievalAssetError, CaseRetrievalGuardError
 from .detection import DetectionGuardError
 from .diagnosis import (
     DiagnosticAssetError,
@@ -37,6 +39,12 @@ class RootCauseDiagnosisRequest(BaseModel):
     detection_result_id: str
 
 
+class ApprovedCaseRetrievalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diagnostic_result_id: str
+    top_k: Literal[3]
+
+
 def create_app(
     public_asset_root: Path,
     expected_manifest_hash: str,
@@ -46,6 +54,8 @@ def create_app(
     expected_dataset_manifest_hash: str | None = None,
     diagnostic_asset_root: Path | None = None,
     expected_diagnostic_manifest_hash: str | None = None,
+    case_asset_root: Path | None = None,
+    expected_case_manifest_hash: str | None = None,
 ) -> FastAPI:
     service = TaskService(
         asset_loader=PublicAssetLoader(public_asset_root, expected_manifest_hash),
@@ -54,6 +64,8 @@ def create_app(
         expected_dataset_manifest_hash=expected_dataset_manifest_hash,
         diagnostic_asset_root=diagnostic_asset_root,
         expected_diagnostic_manifest_hash=expected_diagnostic_manifest_hash,
+        case_asset_root=case_asset_root,
+        expected_case_manifest_hash=expected_case_manifest_hash,
     )
     app = FastAPI(
         title="TuneWise MVP",
@@ -128,6 +140,26 @@ def create_app(
             content={"error": {"code": error.code, "message": error.message}},
         )
 
+    @app.exception_handler(CaseRetrievalGuardError)
+    async def handle_case_retrieval_guard_error(
+        _request: Request,
+        error: CaseRetrievalGuardError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={"error": {"code": error.code, "message": error.message}},
+        )
+
+    @app.exception_handler(CaseRetrievalAssetError)
+    async def handle_case_retrieval_asset_error(
+        _request: Request,
+        error: CaseRetrievalAssetError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={"error": {"code": error.code, "message": error.message}},
+        )
+
     @app.exception_handler(RequestValidationError)
     async def handle_request_validation_error(
         request: Request,
@@ -142,6 +174,31 @@ def create_app(
                     "error": {
                         "code": "DIAGNOSTIC_REQUEST_FORBIDDEN_FIELDS",
                         "message": "诊断请求只能提交 task_id 路径参数与最新 detection_result_id。",
+                    }
+                },
+            )
+        if request.url.path.endswith("/case-retrievals"):
+            if any(
+                item.get("type") == "extra_forbidden" for item in error.errors()
+            ):
+                return JSONResponse(
+                    status_code=422,
+                    content={
+                        "error": {
+                            "code": "CASE_RETRIEVAL_REQUEST_FORBIDDEN_FIELDS",
+                            "message": (
+                                "案例检索请求只能提交最新 diagnostic_result_id "
+                                "与固定 top_k=3。"
+                            ),
+                        }
+                    },
+                )
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error": {
+                        "code": "CASE_RETRIEVAL_REQUEST_INVALID",
+                        "message": "案例检索请求必须引用最新诊断且 top_k 固定为 3。",
                     }
                 },
             )
@@ -184,6 +241,18 @@ def create_app(
             request.detection_result_id,
         )
         return {"task": asdict(task), "diagnostic": asdict(diagnostic)}
+
+    @app.post("/api/tasks/{task_id}/case-retrievals")
+    def retrieve_approved_cases(
+        task_id: str,
+        request: ApprovedCaseRetrievalRequest,
+    ) -> dict:
+        _task, retrieval = service.retrieve_approved_cases(
+            task_id,
+            request.diagnostic_result_id,
+            request.top_k,
+        )
+        return {"retrieval": asdict(retrieval)}
 
     if static_root is not None:
         app.mount("/", StaticFiles(directory=static_root, html=True), name="frontend")

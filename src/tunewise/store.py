@@ -24,6 +24,10 @@ from .detection import (
     deserialize_detection_record,
 )
 from .diagnosis import DiagnosticResultRecord, deserialize_diagnostic_result
+from .case_retrieval import (
+    CaseRetrievalResultRecord,
+    deserialize_case_retrieval_result,
+)
 
 
 class ImportSnapshotConflictError(RuntimeError):
@@ -35,6 +39,10 @@ class DetectionResultConflictError(RuntimeError):
 
 
 class DiagnosticResultConflictError(RuntimeError):
+    pass
+
+
+class CaseRetrievalResultConflictError(RuntimeError):
     pass
 
 
@@ -106,6 +114,21 @@ class TaskStore:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS current_diagnostic_results ("
                 "task_id TEXT PRIMARY KEY, diagnostic_result_id TEXT NOT NULL UNIQUE)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS case_retrieval_results ("
+                "retrieval_result_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, "
+                "diagnostic_result_id TEXT NOT NULL, query_feature_hash TEXT NOT NULL, "
+                "case_index_version TEXT NOT NULL, case_index_hash TEXT NOT NULL, "
+                "scaler_version TEXT NOT NULL, feature_definition_version TEXT NOT NULL, "
+                "compatibility_rule_version TEXT NOT NULL, input_hash TEXT NOT NULL, "
+                "result_hash TEXT NOT NULL, created_at TEXT NOT NULL, payload_json TEXT NOT NULL, "
+                "UNIQUE(task_id, diagnostic_result_id, query_feature_hash, case_index_hash, "
+                "scaler_version, compatibility_rule_version, input_hash))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS current_case_retrieval_results ("
+                "task_id TEXT PRIMARY KEY, retrieval_result_id TEXT NOT NULL UNIQUE)"
             )
 
     def get(self, task_id: str) -> Task | None:
@@ -218,6 +241,15 @@ class TaskStore:
             control_limits=payloads["control_limits"],
             spc_rules=payloads["spc_rules"],
         )
+
+    def get_observable_measurements(self, task_id: str) -> tuple[dict, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM measurements WHERE task_id = ? "
+                "ORDER BY sample_index",
+                (task_id,),
+            ).fetchall()
+        return tuple(json.loads(row["payload_json"]) for row in rows)
 
     def save_detection(
         self,
@@ -354,6 +386,114 @@ class TaskStore:
         if stored_task is None:
             raise RuntimeError("诊断结果保存失败。")
         return stored_task, record
+
+    def get_current_case_retrieval(
+        self,
+        task_id: str,
+    ) -> CaseRetrievalResultRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT result.payload_json FROM current_case_retrieval_results current "
+                "JOIN case_retrieval_results result "
+                "ON result.retrieval_result_id = current.retrieval_result_id "
+                "WHERE current.task_id = ?",
+                (task_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return deserialize_case_retrieval_result(json.loads(row["payload_json"]))
+
+    def save_case_retrieval(
+        self,
+        task: Task,
+        record: CaseRetrievalResultRecord,
+    ) -> tuple[Task, CaseRetrievalResultRecord]:
+        if record.task_id != task.task_id:
+            raise CaseRetrievalResultConflictError(
+                "案例检索结果与任务标识不一致。"
+            )
+        record_payload = json.dumps(
+            asdict(record), ensure_ascii=False, separators=(",", ":")
+        )
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current_task_row = connection.execute(
+                "SELECT payload_json FROM tasks WHERE task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if current_task_row is None:
+                raise RuntimeError("调机任务不存在。")
+            current_task = self._deserialize(current_task_row["payload_json"])
+            if (
+                current_task.status is not TaskStatus.DIAGNOSED
+                or current_task.diagnostic_result is None
+                or current_task.diagnostic_result.diagnostic_result_id
+                != record.diagnostic_result_id
+            ):
+                raise CaseRetrievalResultConflictError(
+                    "当前任务状态或诊断版本不允许保存案例检索结果。"
+                )
+            current = connection.execute(
+                "SELECT result.payload_json FROM current_case_retrieval_results current "
+                "JOIN case_retrieval_results result "
+                "ON result.retrieval_result_id = current.retrieval_result_id "
+                "WHERE current.task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if current is not None:
+                stored_record = deserialize_case_retrieval_result(
+                    json.loads(current["payload_json"])
+                )
+                if (
+                    stored_record.retrieval_result_id != record.retrieval_result_id
+                    or stored_record.result_hash != record.result_hash
+                    or stored_record.input_hash != record.input_hash
+                ):
+                    raise CaseRetrievalResultConflictError(
+                        "任务已有不同的当前案例检索结果。"
+                    )
+                return current_task, stored_record
+            diagnostic = connection.execute(
+                "SELECT diagnostic_result_id FROM current_diagnostic_results "
+                "WHERE task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if (
+                diagnostic is None
+                or diagnostic["diagnostic_result_id"] != record.diagnostic_result_id
+            ):
+                raise CaseRetrievalResultConflictError(
+                    "案例检索引用的诊断结果不是当前版本。"
+                )
+            connection.execute(
+                "INSERT INTO case_retrieval_results ("
+                "retrieval_result_id, task_id, diagnostic_result_id, query_feature_hash, "
+                "case_index_version, case_index_hash, scaler_version, "
+                "feature_definition_version, compatibility_rule_version, input_hash, "
+                "result_hash, created_at, payload_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.retrieval_result_id,
+                    record.task_id,
+                    record.diagnostic_result_id,
+                    record.query_feature_hash,
+                    record.case_index_version,
+                    record.case_index_hash,
+                    record.scaler_version,
+                    record.feature_definition_version,
+                    record.compatibility_rule_version,
+                    record.input_hash,
+                    record.result_hash,
+                    record.created_at,
+                    record_payload,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO current_case_retrieval_results "
+                "(task_id, retrieval_result_id) VALUES (?, ?)",
+                (record.task_id, record.retrieval_result_id),
+            )
+        return current_task, record
 
     @staticmethod
     def _deserialize(payload_json: str) -> Task:

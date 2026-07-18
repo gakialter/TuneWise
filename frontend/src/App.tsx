@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 
 import {
   AnomalyDetectionResult,
+  CaseRetrievalResult,
   createInitialTask,
   importPresetAsset,
+  retrieveApprovedCases,
   runAnomalyDetection,
   runRootCauseDiagnosis,
   DiagnosticResult,
@@ -42,6 +44,12 @@ type DetectionState =
 type DiagnosisState =
   | { kind: "idle" }
   | { kind: "loading" }
+  | { kind: "error"; code: string; message: string };
+
+type CaseRetrievalState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "success"; result: CaseRetrievalResult }
   | { kind: "error"; code: string; message: string };
 
 const detectionCopy: Record<
@@ -343,6 +351,126 @@ function DiagnosisResultView({ diagnostic }: { diagnostic: DiagnosticResult }) {
   );
 }
 
+function CaseRetrievalResultView({ result }: { result: CaseRetrievalResult }) {
+  const empty = result.retrieval_status === "NO_RELEVANT_CASE_AVAILABLE";
+  return (
+    <div className="case-retrieval-result">
+      <div className={`case-retrieval-status ${empty ? "case-retrieval-empty" : ""}`} role="status">
+        <div>
+          <span className="result-code">{result.retrieval_status}</span>
+          <strong>
+            {empty
+              ? "暂无兼容已审核案例"
+              : `已返回 ${result.returned_count} 个兼容已审核案例`}
+          </strong>
+          {result.shortfall_message && <p>{result.shortfall_message}</p>}
+        </div>
+        <dl aria-label="案例检索版本">
+          <div><dt>案例索引</dt><dd>{result.case_index_version}</dd></div>
+          <div><dt>检索标准化器</dt><dd>{result.scaler_version}</dd></div>
+          <div><dt>兼容规则</dt><dd>{result.compatibility_rule_version}</dd></div>
+        </dl>
+      </div>
+
+      {!empty && (
+        <ol className="approved-case-list">
+          {result.ordered_cases.map((approvedCase) => (
+            <li
+              key={approvedCase.case_id}
+              className="approved-case-card"
+              aria-label={`已审核案例 ${approvedCase.case_id}`}
+            >
+              <header>
+                <span className="case-rank">#{approvedCase.rank}</span>
+                <div>
+                  <strong>{approvedCase.case_id}</strong>
+                  <small>{approvedCase.product_model}</small>
+                </div>
+                <span className="approved-badge">APPROVED</span>
+                <div className="case-distance">
+                  <strong>距离 {approvedCase.distance}</strong>
+                  <small>中性显示值 {approvedCase.similarity_display_value}</small>
+                </div>
+              </header>
+
+              <div className="case-facts">
+                <div>
+                  <span>已审核根因</span>
+                  <strong>{approvedCase.reviewed_root_cause}</strong>
+                </div>
+                <div>
+                  <span>候选阶段</span>
+                  <strong>
+                    {approvedCase.retrieval_stage === "TOP3_ROOT_CAUSE"
+                      ? "Top-3 根因池"
+                      : "兼容补足池"}
+                  </strong>
+                </div>
+                <div>
+                  <span>案例内容哈希</span>
+                  <code title={approvedCase.case_content_hash}>
+                    {approvedCase.case_content_hash.slice(0, 12)}
+                  </code>
+                </div>
+              </div>
+
+              <div className="case-detail-grid">
+                <section>
+                  <h4>关键特征差异</h4>
+                  <ol className="feature-difference-list">
+                    {approvedCase.key_feature_differences.map((difference) => (
+                      <li key={difference.feature_index}>
+                        <div>
+                          <strong>{difference.feature_name}</strong>
+                          <code>Δz {difference.standardized_absolute_difference}</code>
+                        </div>
+                        <small>
+                          当前 {difference.query_value} · 案例 {difference.case_value}
+                        </small>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+                <section>
+                  <h4>历史处理动作</h4>
+                  <p>{approvedCase.historical_action.summary}</p>
+                  <h4 className="historical-result-label">
+                    {approvedCase.historical_simulated_result.context_label}
+                  </h4>
+                  <p>{approvedCase.historical_simulated_result.summary}</p>
+                </section>
+                <section>
+                  <h4>适用条件</h4>
+                  <ul className="case-condition-list">
+                    {approvedCase.applicability_conditions.map((condition) => (
+                      <li key={condition}>{condition}</li>
+                    ))}
+                  </ul>
+                  <dl className="case-source-versions">
+                    <div>
+                      <dt>来源数据</dt>
+                      <dd>{approvedCase.source_version_summary.source_dataset_version}</dd>
+                    </div>
+                    <div>
+                      <dt>案例结构</dt>
+                      <dd>{approvedCase.source_version_summary.case_schema_version}</dd>
+                    </div>
+                  </dl>
+                </section>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <p className="case-retrieval-disclaimer" role="note">
+        距离仅衡量固定可观测批次特征的结构化接近程度，不表示根因真实性、因果关系或真实设备适用概率。
+        历史结果仅指规则约束模拟环境中的离线回放，不代表真实产线良率改善。
+      </p>
+    </div>
+  );
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [importState, setImportState] = useState<ImportState>({ kind: "idle" });
@@ -350,6 +478,9 @@ function App() {
     kind: "idle",
   });
   const [diagnosisState, setDiagnosisState] = useState<DiagnosisState>({ kind: "idle" });
+  const [caseRetrievalState, setCaseRetrievalState] = useState<CaseRetrievalState>({
+    kind: "idle",
+  });
 
   useEffect(() => {
     let active = true;
@@ -409,6 +540,7 @@ function App() {
       setImportState({ kind: "idle" });
       setDetectionState({ kind: "idle" });
       setDiagnosisState({ kind: "idle" });
+      setCaseRetrievalState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setImportState({ kind: "error", code: error.code, message: error.message });
@@ -431,6 +563,8 @@ function App() {
       );
       setState({ kind: "ready", task: response.task });
       setDetectionState({ kind: "idle" });
+      setDiagnosisState({ kind: "idle" });
+      setCaseRetrievalState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setDetectionState({
@@ -458,6 +592,7 @@ function App() {
       );
       setState({ kind: "ready", task: response.task });
       setDiagnosisState({ kind: "idle" });
+      setCaseRetrievalState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setDiagnosisState({ kind: "error", code: error.code, message: error.message });
@@ -467,6 +602,32 @@ function App() {
         kind: "error",
         code: "ROOT_CAUSE_DIAGNOSIS_FAILED",
         message: "本地根因诊断服务暂时不可用。",
+      });
+    }
+  }
+
+  async function handleCaseRetrieval() {
+    if (!task.diagnostic_result) return;
+    setCaseRetrievalState({ kind: "loading" });
+    try {
+      const response = await retrieveApprovedCases(
+        task.task_id,
+        task.diagnostic_result.diagnostic_result_id,
+      );
+      setCaseRetrievalState({ kind: "success", result: response.retrieval });
+    } catch (error: unknown) {
+      if (error instanceof TaskCreationError) {
+        setCaseRetrievalState({
+          kind: "error",
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      setCaseRetrievalState({
+        kind: "error",
+        code: "APPROVED_CASE_RETRIEVAL_FAILED",
+        message: "本地案例检索服务暂时不可用。",
       });
     }
   }
@@ -723,7 +884,54 @@ function App() {
               </div>
             )}
             {task.diagnostic_result && (
-              <DiagnosisResultView diagnostic={task.diagnostic_result} />
+              <>
+                <DiagnosisResultView diagnostic={task.diagnostic_result} />
+                <section className="case-retrieval-section" aria-labelledby="case-retrieval-title">
+                  <div className="case-retrieval-intro">
+                    <div>
+                      <p className="section-kicker">独立标准化器 · 结构化 KNN</p>
+                      <h2 id="case-retrieval-title">相似案例</h2>
+                      <p className="import-copy">
+                        先检索当前 Top-3 根因池，不足时再由其余兼容案例补足；根因与历史动作不参与距离计算。
+                      </p>
+                    </div>
+                    <span className="approved-only-note">仅检索 APPROVED 案例</span>
+                    <button
+                      className="primary-action detection-action"
+                      type="button"
+                      disabled={
+                        caseRetrievalState.kind === "loading" ||
+                        caseRetrievalState.kind === "success"
+                      }
+                      onClick={handleCaseRetrieval}
+                    >
+                      {caseRetrievalState.kind === "success"
+                        ? "案例检索已完成"
+                        : caseRetrievalState.kind === "error"
+                          ? "重新检索已审核案例"
+                          : "检索已审核案例"}
+                    </button>
+                  </div>
+                  {caseRetrievalState.kind === "loading" && (
+                    <div className="import-progress" role="status" aria-live="polite">
+                      <span className="inline-loader" />
+                      <span>正在校验 APPROVED 案例索引并计算结构化距离…</span>
+                    </div>
+                  )}
+                  {caseRetrievalState.kind === "error" && (
+                    <div className="inline-error" role="alert">
+                      <div>
+                        <strong>案例检索已拒绝</strong>
+                        <p>{caseRetrievalState.message}</p>
+                      </div>
+                      <code>{caseRetrievalState.code}</code>
+                    </div>
+                  )}
+                  {caseRetrievalState.kind === "success" && (
+                    <CaseRetrievalResultView result={caseRetrievalState.result} />
+                  )}
+                </section>
+              </>
             )}
           </section>
         )}

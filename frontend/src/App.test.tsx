@@ -300,6 +300,91 @@ function diagnosisResponse(evidenceStatus = "SUFFICIENT_EVIDENCE") {
   };
 }
 
+const retrievedCases = [
+  ["tw-aa-approved-011", "PLANE_TILT", "0.424311"],
+  ["tw-aa-approved-001", "PLANE_TILT", "0.702145"],
+  ["tw-aa-approved-002", "PLANE_TILT", "0.991284"],
+].map(([caseId, rootCause, distance], index) => ({
+  rank: index + 1,
+  case_id: caseId,
+  retrieval_stage: "TOP3_ROOT_CAUSE",
+  distance,
+  similarity_display_value: `${(1 / (1 + Number(distance))).toFixed(6)}`,
+  key_feature_differences: Array.from({ length: 5 }, (_, featureIndex) => ({
+    feature_name: [
+      "pitch_mean",
+      "roll_mean",
+      "top_bottom_difference",
+      "corner_mtf_range",
+      "center_corner_gap",
+    ][featureIndex],
+    feature_index: [21, 24, 47, 44, 49][featureIndex],
+    standardized_absolute_difference: `${1.5 - featureIndex * 0.1}00000`,
+    query_value: "0.250000000000",
+    case_value: "0.210000000000",
+  })),
+  reviewed_root_cause: rootCause,
+  historical_action: {
+    context: "VERSIONED_APPROVED_OFFLINE_CASE",
+    summary: "历史案例在规则约束模拟环境中校正 Pitch/Roll 参数族。",
+  },
+  historical_simulated_result: {
+    context_label: "规则约束模拟环境中的历史案例结果",
+    status: "SUCCESS",
+    summary: "该历史案例在固定规则与版本的模拟环境中达到准入条件。",
+  },
+  applicability_conditions: [
+    "仅适用于 AA 工站与兼容产品型号。",
+    "稳定空间不对称且倾斜证据与当前参数状态一致。",
+  ],
+  product_model: "TW-AA-PROTOTYPE-V1",
+  source_version_summary: {
+    source_dataset_version: "tw-diagnostic-dev-dataset-v1",
+    feature_definition_version: "tw-feature-definition-v1",
+    rule_set_version: "tw-rules-v1",
+    retrieval_rule_version: "tw-case-retrieval-rules-v1",
+    case_schema_version: "tw-approved-case-schema-v1",
+  },
+  case_content_hash: `${index + 6}`.repeat(64),
+  case_index_version: "tw-approved-case-index-v1",
+}));
+
+function retrievalResponse(
+  status = "CASES_FOUND",
+  returnedCount = 3,
+) {
+  const orderedCases = retrievedCases.slice(0, returnedCount);
+  return {
+    retrieval: {
+      retrieval_result_version: "tw-case-retrieval-result-v1",
+      retrieval_result_id: "tw-case-retrieval-fixed",
+      task_id: "tw-demo-task-001",
+      diagnostic_result_id: "tw-diagnostic-fixed",
+      query_feature_hash: "3".repeat(64),
+      ordered_top3_root_causes: ["PLANE_TILT", "XY_DECENTER", "REFERENCE_DRIFT"],
+      ordered_cases: orderedCases,
+      retrieval_status: status,
+      requested_count: 3,
+      returned_count: returnedCount,
+      shortfall_message:
+        status === "PARTIAL_RESULTS"
+          ? `仅找到 ${returnedCount} 个合法兼容已审核案例。`
+          : status === "NO_RELEVANT_CASE_AVAILABLE"
+            ? "暂无兼容已审核案例。"
+            : null,
+      case_index_version: "tw-approved-case-index-v1",
+      case_index_hash: "a".repeat(64),
+      scaler_version: "tw-case-retrieval-scaler-v1",
+      feature_definition_version: "tw-feature-definition-v1",
+      compatibility_rule_version: "tw-product-compatibility-v1",
+      retrieval_rule_version: "tw-case-retrieval-rules-v1",
+      input_hash: "b".repeat(64),
+      result_hash: "c".repeat(64),
+      created_at: "2026-07-18T08:02:00.000000Z",
+    },
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -756,4 +841,144 @@ test("renders structured diagnosis errors inline without window alert", async ()
   ).toBeTruthy();
   expect(screen.getByText("DIAGNOSTIC_ASSET_HASH_MISMATCH")).toBeTruthy();
   expect(alert).not.toHaveBeenCalled();
+});
+
+test("retrieves and displays at most three approved cases with neutral evidence", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(diagnosisResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(retrievalResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "检索已审核案例" }));
+
+  expect(await screen.findByRole("heading", { name: "相似案例" })).toBeTruthy();
+  expect(screen.getByText("仅检索 APPROVED 案例")).toBeTruthy();
+  expect(screen.getAllByRole("listitem", { name: /已审核案例/ })).toHaveLength(3);
+  expect(screen.getByText("tw-aa-approved-011")).toBeTruthy();
+  expect(screen.getAllByText("PLANE_TILT").length).toBeGreaterThan(0);
+  expect(screen.getByText("距离 0.424311")).toBeTruthy();
+  expect(screen.getAllByText("pitch_mean").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("历史处理动作").length).toBeGreaterThan(0);
+  expect(
+    screen.getAllByText("规则约束模拟环境中的历史案例结果").length,
+  ).toBeGreaterThan(0);
+  expect(screen.getByText("tw-approved-case-index-v1")).toBeTruthy();
+  expect(screen.getByText("tw-case-retrieval-scaler-v1")).toBeTruthy();
+  expect(screen.getByText(/不表示根因真实性、因果关系或真实设备适用概率/)).toBeTruthy();
+  expect(screen.queryByText(/推荐采用|一键复用|参数候选|最佳历史方案/)).toBeNull();
+  expect(fetchMock).toHaveBeenLastCalledWith(
+    "/api/tasks/tw-demo-task-001/case-retrievals",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ diagnostic_result_id: "tw-diagnostic-fixed", top_k: 3 }),
+    },
+  );
+});
+
+test("shows accessible case retrieval loading and disables duplicate action", async () => {
+  let resolveRetrieval: (response: Response) => void = () => undefined;
+  const pending = new Promise<Response>((resolve) => {
+    resolveRetrieval = resolve;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(diagnosisResponse().task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockReturnValueOnce(pending),
+  );
+
+  render(<App />);
+  const action = await screen.findByRole("button", { name: "检索已审核案例" });
+  fireEvent.click(action);
+
+  expect(await screen.findByText("正在校验 APPROVED 案例索引并计算结构化距离…")).toBeTruthy();
+  expect((action as HTMLButtonElement).disabled).toBe(true);
+  resolveRetrieval(
+    new Response(JSON.stringify(retrievalResponse()), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  expect(await screen.findByText("tw-aa-approved-011")).toBeTruthy();
+});
+
+test.each([
+  ["PARTIAL_RESULTS", 2, "仅找到 2 个合法兼容已审核案例。"],
+  ["NO_RELEVANT_CASE_AVAILABLE", 0, "暂无兼容已审核案例。"],
+])("renders %s case retrieval state without filling from invalid cases", async (status, count, message) => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(diagnosisResponse().task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(retrievalResponse(status, count)), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+  );
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "检索已审核案例" }));
+
+  expect(await screen.findByText(message)).toBeTruthy();
+  expect(screen.queryAllByRole("listitem", { name: /已审核案例/ })).toHaveLength(count);
+  expect(screen.getAllByText("DIAGNOSED")).toHaveLength(2);
+});
+
+test("renders structured case retrieval errors without replacing diagnosis", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(diagnosisResponse().task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "CASE_ASSET_HASH_MISMATCH",
+              message: "案例检索资产内容哈希不匹配：index.json",
+            },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+  );
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "检索已审核案例" }));
+
+  expect(await screen.findByText("案例检索资产内容哈希不匹配：index.json")).toBeTruthy();
+  expect(screen.getByText("CASE_ASSET_HASH_MISMATCH")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
 });
