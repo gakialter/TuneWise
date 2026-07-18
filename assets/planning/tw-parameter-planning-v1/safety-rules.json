@@ -1,0 +1,1 @@
+{"maximum_adjusted_parameter_count":2,"parameter_families":{"PITCH_ROLL":["pitch","roll"],"XY_OFFSET":["x_offset","y_offset"],"Z_OFFSET":["z_offset"]},"rule_set_version":"tw-rules-v1","safety_rule_version":"tw-parameter-safety-v1","tick_size":"0.050000","top1_allowed_families":{"PLANE_TILT":"PITCH_ROLL","XY_DECENTER":"XY_OFFSET","Z_DEFOCUS_CONDITIONAL":"Z_OFFSET"}}

@@ -4,7 +4,9 @@ import {
   AnomalyDetectionResult,
   CaseRetrievalResult,
   createInitialTask,
+  generateParameterPlans,
   importPresetAsset,
+  ParameterPlanningResult,
   retrieveApprovedCases,
   runAnomalyDetection,
   runRootCauseDiagnosis,
@@ -50,6 +52,12 @@ type CaseRetrievalState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "success"; result: CaseRetrievalResult }
+  | { kind: "error"; code: string; message: string };
+
+type ParameterPlanningState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "success"; result: ParameterPlanningResult }
   | { kind: "error"; code: string; message: string };
 
 const detectionCopy: Record<
@@ -471,6 +479,167 @@ function CaseRetrievalResultView({ result }: { result: CaseRetrievalResult }) {
   );
 }
 
+function ParameterPlanningResultView({ result }: { result: ParameterPlanningResult }) {
+  const constraints = Object.fromEntries(
+    result.parameter_constraints.map((constraint) => [constraint.parameter_name, constraint]),
+  );
+
+  return (
+    <div className="parameter-planning-result">
+      <div
+        className={`planning-status planning-status-${result.planning_status.toLowerCase()}`}
+        role="status"
+      >
+        <div>
+          <span>规划状态</span>
+          <strong>{result.planning_status}</strong>
+          {result.refusal_message && <p>{result.refusal_message}</p>}
+        </div>
+        {result.refusal_code && <code>{result.refusal_code}</code>}
+      </div>
+
+      {result.supporting_evidence.length > 0 && (
+        <section className="planning-evidence-summary" aria-labelledby="planning-evidence-summary-title">
+          <h3 id="planning-evidence-summary-title">规划依据摘要</h3>
+          <ul>
+            {result.supporting_evidence.map((evidence) => (
+              <li key={evidence}>{evidence}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {result.direction_evidence.length > 0 && (
+        <section className="direction-evidence-section" aria-labelledby="direction-evidence-title">
+          <h3 id="direction-evidence-title">参数方向证据</h3>
+          <div className="direction-evidence-grid">
+            {result.direction_evidence.map((evidence) => (
+              <article key={evidence.parameter_name} className="direction-evidence-card">
+                <header>
+                  <strong>{parameterLabels[evidence.parameter_name] ?? evidence.parameter_name}</strong>
+                  <span className={`conflict-${evidence.conflict_status.toLowerCase()}`}>
+                    {evidence.conflict_status}
+                  </span>
+                </header>
+                <dl>
+                  <div><dt>当前值</dt><dd>{evidence.current_value} · {evidence.current_tick} ticks</dd></div>
+                  <div><dt>标称值</dt><dd>{evidence.nominal_value} · {evidence.nominal_tick} ticks</dd></div>
+                  <div><dt>方向</dt><dd>{evidence.recommended_direction}</dd></div>
+                </dl>
+                <p>{evidence.supporting_features.join("；") || "无充分空间轴支持"}</p>
+                {evidence.conflicting_features.length > 0 && (
+                  <p className="direction-conflict">
+                    冲突或不足：{evidence.conflicting_features.join("；")}
+                  </p>
+                )}
+                <small title={evidence.evidence_hash}>
+                  证据哈希 {evidence.evidence_hash.slice(0, 12)}
+                </small>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {result.ordered_candidates.length > 0 && (
+        <section className="planning-candidates" aria-labelledby="planning-candidates-title">
+          <h3 id="planning-candidates-title">通过当前证据和安全规则生成的候选方案</h3>
+          <p className="planning-readonly-note">候选仅供查看；本阶段不提供采纳或设备应用操作。</p>
+          <ol className="planning-candidate-list">
+            {result.ordered_candidates.map((candidate, index) => {
+              const changedParameters = Object.keys(candidate.delta_ticks);
+              return (
+                <li
+                  key={candidate.candidate_id}
+                  className="planning-candidate-card"
+                  aria-label={`安全参数候选 ${index + 1}`}
+                >
+                  <header>
+                    <span className="candidate-order">{String(index + 1).padStart(2, "0")}</span>
+                    <div>
+                      <strong>{candidate.generation_type}</strong>
+                      <small>{candidate.candidate_id}</small>
+                    </div>
+                    <span>{candidate.total_absolute_delta_ticks} total ticks</span>
+                    <span>支持案例 {candidate.supporting_case_count}</span>
+                  </header>
+
+                  <div className="candidate-parameter-grid">
+                    {changedParameters.map((parameterName) => {
+                      const constraint = constraints[parameterName];
+                      return (
+                        <section key={parameterName}>
+                          <h4>{parameterLabels[parameterName] ?? parameterName}</h4>
+                          <dl>
+                            <div><dt>当前值</dt><dd>{candidate.current_values[parameterName]}</dd></div>
+                            <div><dt>建议值</dt><dd>{candidate.proposed_values[parameterName]}</dd></div>
+                            <div>
+                              <dt>变化量</dt>
+                              <dd>{candidate.deltas[parameterName]} · {candidate.delta_ticks[parameterName]} ticks</dd>
+                            </div>
+                          </dl>
+                          {constraint && (
+                            <p className="constraint-summary">
+                              <span>[{constraint.minimum}, {constraint.maximum}]</span>
+                              <span>步长 {constraint.step}</span>
+                              <span>最大变化 {constraint.maximum_single_plan_delta}</span>
+                            </p>
+                          )}
+                        </section>
+                      );
+                    })}
+                  </div>
+
+                  {candidate.supporting_case_ids.length > 0 && (
+                    <p className="supporting-cases">
+                      <strong>参与计算的案例</strong> {candidate.supporting_case_ids.join("、")}
+                    </p>
+                  )}
+
+                  <details className="validation-details">
+                    <summary>逐项安全校验 · {candidate.validation_status}</summary>
+                    <ul>
+                      {candidate.validation_checks.map((check) => (
+                        <li key={check.check_code}>
+                          <code>{check.check_code}</code>
+                          <strong>{check.status}</strong>
+                          <span>{check.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                  <p className="candidate-hash" title={candidate.candidate_hash}>
+                    候选哈希 {candidate.candidate_hash.slice(0, 16)}
+                  </p>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+
+      {result.recommended_inspection_actions.length > 0 && (
+        <section className="inspection-actions" aria-labelledby="inspection-actions-title">
+          <h3 id="inspection-actions-title">版本化排查建议</h3>
+          <ul>
+            {result.recommended_inspection_actions.map((action) => (
+              <li key={action}>{action}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <dl className="planning-version-grid">
+        <div><dt>方向规则</dt><dd>{result.direction_rule_version}</dd></div>
+        <div><dt>安全规则</dt><dd>{result.safety_rule_version}</dd></div>
+        <div><dt>约束快照</dt><dd>{result.constraint_snapshot_version}</dd></div>
+        <div><dt>规划规则</dt><dd>{result.planning_rule_version}</dd></div>
+        <div><dt>结果哈希</dt><dd title={result.result_hash}>{result.result_hash.slice(0, 16)}</dd></div>
+      </dl>
+    </div>
+  );
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [importState, setImportState] = useState<ImportState>({ kind: "idle" });
@@ -481,6 +650,8 @@ function App() {
   const [caseRetrievalState, setCaseRetrievalState] = useState<CaseRetrievalState>({
     kind: "idle",
   });
+  const [parameterPlanningState, setParameterPlanningState] =
+    useState<ParameterPlanningState>({ kind: "idle" });
 
   useEffect(() => {
     let active = true;
@@ -541,6 +712,7 @@ function App() {
       setDetectionState({ kind: "idle" });
       setDiagnosisState({ kind: "idle" });
       setCaseRetrievalState({ kind: "idle" });
+      setParameterPlanningState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setImportState({ kind: "error", code: error.code, message: error.message });
@@ -565,6 +737,7 @@ function App() {
       setDetectionState({ kind: "idle" });
       setDiagnosisState({ kind: "idle" });
       setCaseRetrievalState({ kind: "idle" });
+      setParameterPlanningState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setDetectionState({
@@ -593,6 +766,7 @@ function App() {
       setState({ kind: "ready", task: response.task });
       setDiagnosisState({ kind: "idle" });
       setCaseRetrievalState({ kind: "idle" });
+      setParameterPlanningState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setDiagnosisState({ kind: "error", code: error.code, message: error.message });
@@ -628,6 +802,36 @@ function App() {
         kind: "error",
         code: "APPROVED_CASE_RETRIEVAL_FAILED",
         message: "本地案例检索服务暂时不可用。",
+      });
+    }
+  }
+
+  async function handleParameterPlanning() {
+    if (!task.diagnostic_result) return;
+    setParameterPlanningState({ kind: "loading" });
+    try {
+      const response = await generateParameterPlans(
+        task.task_id,
+        task.diagnostic_result.diagnostic_result_id,
+        caseRetrievalState.kind === "success"
+          ? caseRetrievalState.result.retrieval_result_id
+          : null,
+      );
+      setState({ kind: "ready", task: response.task });
+      setParameterPlanningState({ kind: "success", result: response.planning });
+    } catch (error: unknown) {
+      if (error instanceof TaskCreationError) {
+        setParameterPlanningState({
+          kind: "error",
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      setParameterPlanningState({
+        kind: "error",
+        code: "PARAMETER_PLANNING_FAILED",
+        message: "本地参数规划服务暂时不可用。",
       });
     }
   }
@@ -901,11 +1105,12 @@ function App() {
                       type="button"
                       disabled={
                         caseRetrievalState.kind === "loading" ||
-                        caseRetrievalState.kind === "success"
+                        caseRetrievalState.kind === "success" ||
+                        Boolean(task.parameter_planning_result)
                       }
                       onClick={handleCaseRetrieval}
                     >
-                      {caseRetrievalState.kind === "success"
+                      {caseRetrievalState.kind === "success" || task.parameter_planning_result
                         ? "案例检索已完成"
                         : caseRetrievalState.kind === "error"
                           ? "重新检索已审核案例"
@@ -929,6 +1134,58 @@ function App() {
                   )}
                   {caseRetrievalState.kind === "success" && (
                     <CaseRetrievalResultView result={caseRetrievalState.result} />
+                  )}
+                </section>
+                <section className="parameter-planning-section" aria-labelledby="parameter-planning-title">
+                  <div className="parameter-planning-intro">
+                    <div>
+                      <p className="section-kicker">确定性方向规则 · 统一安全校验</p>
+                      <h2 id="parameter-planning-title">安全参数候选</h2>
+                      <p className="import-copy">
+                        服务端独立形成方向证据，按 tick 生成候选，并由同一安全规则逐项校验。
+                      </p>
+                    </div>
+                    <span className="readonly-label">只读候选</span>
+                    <button
+                      className="primary-action detection-action"
+                      type="button"
+                      disabled={
+                        parameterPlanningState.kind === "loading" ||
+                        parameterPlanningState.kind === "success" ||
+                        Boolean(task.parameter_planning_result)
+                      }
+                      onClick={handleParameterPlanning}
+                    >
+                      {parameterPlanningState.kind === "success" || task.parameter_planning_result
+                        ? "候选生成已完成"
+                        : parameterPlanningState.kind === "error"
+                          ? "重新生成安全参数候选"
+                          : "生成安全参数候选"}
+                    </button>
+                  </div>
+                  {parameterPlanningState.kind === "loading" && (
+                    <div className="import-progress" role="status" aria-live="polite">
+                      <span className="inline-loader" />
+                      <span>正在生成方向证据并执行统一安全校验…</span>
+                    </div>
+                  )}
+                  {parameterPlanningState.kind === "error" && (
+                    <div className="inline-error" role="alert">
+                      <div>
+                        <strong>参数候选生成已拒绝</strong>
+                        <p>{parameterPlanningState.message}</p>
+                      </div>
+                      <code>{parameterPlanningState.code}</code>
+                    </div>
+                  )}
+                  {(parameterPlanningState.kind === "success" || task.parameter_planning_result) && (
+                    <ParameterPlanningResultView
+                      result={
+                        parameterPlanningState.kind === "success"
+                          ? parameterPlanningState.result
+                          : task.parameter_planning_result as ParameterPlanningResult
+                      }
+                    />
                   )}
                 </section>
               </>

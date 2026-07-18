@@ -1,0 +1,1 @@
+{"case_action_version":"tw-approved-case-action-v1","generation_ticks":{"CONSERVATIVE":1,"STANDARD":2},"maximum_candidate_count":3,"planning_rule_version":"tw-parameter-planning-v1","rule_set_version":"tw-rules-v1","sort_order":["total_absolute_delta_ticks:ASC","supporting_case_count:DESC","candidate_id:ASC"]}

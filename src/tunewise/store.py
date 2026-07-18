@@ -28,6 +28,12 @@ from .case_retrieval import (
     CaseRetrievalResultRecord,
     deserialize_case_retrieval_result,
 )
+from .parameter_planning import (
+    ParameterPlanningGuardError,
+    ParameterPlanningRefusalRecord,
+    ParameterPlanningResultRecord,
+    deserialize_parameter_planning_result,
+)
 
 
 class ImportSnapshotConflictError(RuntimeError):
@@ -46,6 +52,10 @@ class CaseRetrievalResultConflictError(RuntimeError):
     pass
 
 
+class ParameterPlanningResultConflictError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class StoredDetectionInput:
     manifest: dict | None
@@ -53,6 +63,15 @@ class StoredDetectionInput:
     measurements: tuple[dict, ...]
     control_limits: dict | None
     spc_rules: dict | None
+
+
+@dataclass(frozen=True, slots=True)
+class StoredPlanningInput:
+    manifest: dict | None
+    batch: dict | None
+    measurements: tuple[dict, ...]
+    control_limits: dict | None
+    parameter_constraints: dict | None
 
 
 class TaskStore:
@@ -129,6 +148,25 @@ class TaskStore:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS current_case_retrieval_results ("
                 "task_id TEXT PRIMARY KEY, retrieval_result_id TEXT NOT NULL UNIQUE)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS parameter_planning_results ("
+                "planning_result_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, "
+                "diagnostic_result_id TEXT NOT NULL, case_retrieval_result_id TEXT, "
+                "input_hash TEXT NOT NULL, result_hash TEXT NOT NULL, "
+                "planning_status TEXT NOT NULL, created_at TEXT NOT NULL, "
+                "payload_json TEXT NOT NULL, "
+                "UNIQUE(task_id, diagnostic_result_id, case_retrieval_result_id, input_hash))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS current_parameter_planning_results ("
+                "task_id TEXT PRIMARY KEY, planning_result_id TEXT NOT NULL UNIQUE)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS parameter_planning_refusals ("
+                "refusal_record_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, "
+                "refusal_code TEXT NOT NULL, result_hash TEXT NOT NULL, "
+                "created_at TEXT NOT NULL, payload_json TEXT NOT NULL)"
             )
 
     def get(self, task_id: str) -> Task | None:
@@ -250,6 +288,31 @@ class TaskStore:
                 (task_id,),
             ).fetchall()
         return tuple(json.loads(row["payload_json"]) for row in rows)
+
+    def get_planning_input(self, task_id: str) -> StoredPlanningInput:
+        with self._connect() as connection:
+            payloads: dict[str, dict | None] = {}
+            for key, table in (
+                ("manifest", "dataset_manifests"),
+                ("batch", "batches"),
+                ("control_limits", "control_limit_snapshots"),
+                ("parameter_constraints", "parameter_constraint_snapshots"),
+            ):
+                row = connection.execute(
+                    f"SELECT payload_json FROM {table} WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                payloads[key] = None if row is None else json.loads(row["payload_json"])
+            rows = connection.execute(
+                "SELECT payload_json FROM measurements WHERE task_id = ? ORDER BY sample_index",
+                (task_id,),
+            ).fetchall()
+        return StoredPlanningInput(
+            manifest=payloads["manifest"],
+            batch=payloads["batch"],
+            measurements=tuple(json.loads(row["payload_json"]) for row in rows),
+            control_limits=payloads["control_limits"],
+            parameter_constraints=payloads["parameter_constraints"],
+        )
 
     def save_detection(
         self,
@@ -495,6 +558,126 @@ class TaskStore:
             )
         return current_task, record
 
+    def get_current_parameter_planning(
+        self, task_id: str
+    ) -> ParameterPlanningResultRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT result.payload_json FROM current_parameter_planning_results current "
+                "JOIN parameter_planning_results result "
+                "ON result.planning_result_id = current.planning_result_id "
+                "WHERE current.task_id = ?",
+                (task_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return deserialize_parameter_planning_result(json.loads(row["payload_json"]))
+
+    def save_parameter_planning_refusal(
+        self, record: ParameterPlanningRefusalRecord
+    ) -> None:
+        payload = json.dumps(asdict(record), ensure_ascii=False, separators=(",", ":"))
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO parameter_planning_refusals ("
+                "refusal_record_id, task_id, refusal_code, result_hash, created_at, "
+                "payload_json) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    record.refusal_record_id,
+                    record.task_id,
+                    record.refusal_code,
+                    record.result_hash,
+                    record.created_at,
+                    payload,
+                ),
+            )
+
+    def save_parameter_planning(
+        self,
+        task: Task,
+        record: ParameterPlanningResultRecord,
+    ) -> tuple[Task, ParameterPlanningResultRecord]:
+        if record.task_id != task.task_id:
+            raise ParameterPlanningResultConflictError(
+                "参数规划结果与任务标识不一致。"
+            )
+        task_payload = json.dumps(asdict(task), ensure_ascii=False, separators=(",", ":"))
+        record_payload = json.dumps(asdict(record), ensure_ascii=False, separators=(",", ":"))
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current_task_row = connection.execute(
+                "SELECT payload_json FROM tasks WHERE task_id = ?", (task.task_id,)
+            ).fetchone()
+            if current_task_row is None:
+                raise RuntimeError("调机任务不存在。")
+            current_task = self._deserialize(current_task_row["payload_json"])
+            if (
+                current_task.status is not TaskStatus.DIAGNOSED
+                or current_task.diagnostic_result is None
+                or current_task.diagnostic_result.diagnostic_result_id
+                != record.diagnostic_result_id
+            ):
+                raise ParameterPlanningResultConflictError(
+                    "当前任务状态或诊断版本不允许保存参数规划结果。"
+                )
+            current = connection.execute(
+                "SELECT result.payload_json FROM current_parameter_planning_results current "
+                "JOIN parameter_planning_results result "
+                "ON result.planning_result_id = current.planning_result_id "
+                "WHERE current.task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if current is not None:
+                stored = deserialize_parameter_planning_result(
+                    json.loads(current["payload_json"])
+                )
+                if (
+                    stored.planning_result_id != record.planning_result_id
+                    or stored.result_hash != record.result_hash
+                ):
+                    raise ParameterPlanningResultConflictError(
+                        "任务已有不同的当前参数规划结果。"
+                    )
+                return current_task, stored
+            diagnostic = connection.execute(
+                "SELECT diagnostic_result_id FROM current_diagnostic_results WHERE task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if diagnostic is None or diagnostic["diagnostic_result_id"] != record.diagnostic_result_id:
+                raise ParameterPlanningResultConflictError(
+                    "参数规划引用的诊断结果不是当前版本。"
+                )
+            connection.execute(
+                "INSERT INTO parameter_planning_results ("
+                "planning_result_id, task_id, diagnostic_result_id, "
+                "case_retrieval_result_id, input_hash, result_hash, planning_status, "
+                "created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.planning_result_id,
+                    record.task_id,
+                    record.diagnostic_result_id,
+                    record.case_retrieval_result_id,
+                    record.input_hash,
+                    record.result_hash,
+                    record.planning_status,
+                    record.created_at,
+                    record_payload,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO current_parameter_planning_results (task_id, planning_result_id) "
+                "VALUES (?, ?)",
+                (record.task_id, record.planning_result_id),
+            )
+            connection.execute(
+                "UPDATE tasks SET payload_json = ? WHERE task_id = ?",
+                (task_payload, task.task_id),
+            )
+        stored_task = self.get(task.task_id)
+        if stored_task is None:
+            raise RuntimeError("参数规划结果保存失败。")
+        return stored_task, record
+
     @staticmethod
     def _deserialize(payload_json: str) -> Task:
         payload = json.loads(payload_json)
@@ -520,6 +703,7 @@ class TaskStore:
             )
         detection_payload = payload.get("anomaly_detection")
         diagnostic_payload = payload.get("diagnostic_result")
+        planning_payload = payload.get("parameter_planning_result")
         return Task(
             task_id=payload["task_id"],
             status=TaskStatus(payload["status"]),
@@ -543,5 +727,10 @@ class TaskStore:
                 None
                 if diagnostic_payload is None
                 else deserialize_diagnostic_result(diagnostic_payload)
+            ),
+            parameter_planning_result=(
+                None
+                if planning_payload is None
+                else deserialize_parameter_planning_result(planning_payload)
             ),
         )

@@ -385,6 +385,166 @@ function retrievalResponse(
   };
 }
 
+const planningConstraints = ["x_offset", "y_offset", "pitch", "roll", "z_offset"].map(
+  (parameterName) => ({
+    parameter_name: parameterName,
+    nominal_value: "0.000000",
+    minimum: "-1.000000",
+    maximum: "1.000000",
+    step: "0.050000",
+    maximum_single_plan_delta: parameterName === "z_offset" ? "0.100000" : "0.200000",
+  }),
+);
+
+const planningDirectionEvidence = [
+  {
+    parameter_name: "pitch",
+    current_value: "0.250000",
+    current_tick: 5,
+    nominal_value: "0.000000",
+    nominal_tick: 0,
+    recommended_direction: "DECREASE",
+    supporting_features: ["top_bottom_difference=0.132913"],
+    supporting_rules: ["PLANE_TILT_PITCH_SAME_SIGN"],
+    conflicting_features: [],
+    conflict_status: "NO_CONFLICT",
+    diagnostic_result_version: "tw-diagnostic-result-v1",
+    feature_definition_version: "tw-feature-definition-v1",
+    direction_rule_version: "tw-direction-rules-v1",
+    evidence_hash: "d".repeat(64),
+  },
+  {
+    parameter_name: "roll",
+    current_value: "-0.200000",
+    current_tick: -4,
+    nominal_value: "0.000000",
+    nominal_tick: 0,
+    recommended_direction: "INCREASE",
+    supporting_features: [],
+    supporting_rules: [],
+    conflicting_features: ["left_right_difference=0.014371"],
+    conflict_status: "INSUFFICIENT_SUPPORT",
+    diagnostic_result_version: "tw-diagnostic-result-v1",
+    feature_definition_version: "tw-feature-definition-v1",
+    direction_rule_version: "tw-direction-rules-v1",
+    evidence_hash: "e".repeat(64),
+  },
+];
+
+function planningCandidate(
+  generationType: string,
+  deltaTick: number,
+  supportingCaseIds: string[] = [],
+) {
+  const proposedTick = 5 + deltaTick;
+  const proposedPitch = (proposedTick * 0.05).toFixed(6);
+  return {
+    candidate_id: `tw-parameter-candidate-${generationType.toLowerCase()}`,
+    generation_type: generationType,
+    generation_sources: [
+      generationType === "CASE_GUIDED" ? "CASE_GUIDED_MEDIAN" : `RULE_${generationType}`,
+    ],
+    root_cause: "PLANE_TILT",
+    parameter_family: "PITCH_ROLL",
+    current_values: { x_offset: "0.100000", y_offset: "-0.050000", pitch: "0.250000", roll: "-0.200000", z_offset: "0.000000" },
+    proposed_values: { x_offset: "0.100000", y_offset: "-0.050000", pitch: proposedPitch, roll: "-0.200000", z_offset: "0.000000" },
+    current_ticks: { x_offset: 2, y_offset: -1, pitch: 5, roll: -4, z_offset: 0 },
+    proposed_ticks: { x_offset: 2, y_offset: -1, pitch: proposedTick, roll: -4, z_offset: 0 },
+    deltas: { pitch: (deltaTick * 0.05).toFixed(6) },
+    delta_ticks: { pitch: deltaTick },
+    total_absolute_delta_ticks: Math.abs(deltaTick),
+    direction_evidence: [planningDirectionEvidence[0]],
+    supporting_case_ids: supportingCaseIds,
+    supporting_case_count: supportingCaseIds.length,
+    constraint_snapshot_version: "tw-parameter-constraints-v1",
+    rule_set_version: "tw-rules-v1",
+    direction_rule_version: "tw-direction-rules-v1",
+    safety_rule_version: "tw-parameter-safety-v1",
+    diagnostic_result_version: "tw-diagnostic-result-v1",
+    case_retrieval_result_version: "tw-case-retrieval-result-v1",
+    validation_checks: [
+      { check_code: "CURRENT_VALUE_GRID", status: "PASSED", detail: "当前值位于网格。" },
+      { check_code: "MAXIMUM_SINGLE_PLAN_DELTA", status: "PASSED", detail: "单次变化未超过上限。" },
+      { check_code: "NOMINAL_NOT_CROSSED", status: "PASSED", detail: "调整未跨过标称值。" },
+    ],
+    validation_status: "PASSED",
+    rejection_reasons: [],
+    candidate_hash: `${Math.abs(deltaTick)}`.repeat(64),
+  };
+}
+
+function planningResponse(refused = false) {
+  const planning = {
+    planning_result_version: "tw-parameter-planning-result-v1",
+    planning_result_id: "tw-parameter-planning-fixed",
+    task_id: "tw-demo-task-001",
+    diagnostic_result_id: "tw-diagnostic-fixed",
+    case_retrieval_result_id: refused ? null : "tw-case-retrieval-fixed",
+    top1_root_cause: refused ? "PLATFORM_INSTABILITY" : "PLANE_TILT",
+    direction_evidence: refused ? [] : planningDirectionEvidence,
+    ordered_candidates: refused
+      ? []
+      : [
+          planningCandidate("CONSERVATIVE", -1),
+          planningCandidate("STANDARD", -2),
+          planningCandidate("CASE_GUIDED", -3, [
+            "tw-aa-approved-001",
+            "tw-aa-approved-002",
+            "tw-aa-approved-011",
+          ]),
+        ],
+    parameter_constraints: refused ? [] : planningConstraints,
+    planning_status: refused
+      ? "PARAMETER_RECOMMENDATION_REFUSED"
+      : "CANDIDATES_AVAILABLE",
+    refusal_code: refused ? "PLATFORM_INSTABILITY_INSPECTION_ONLY" : null,
+    refusal_message: refused ? "当前 Top-1 属于不可调故障，仅输出结构化排查建议。" : null,
+    supporting_evidence: refused
+      ? ["top1_root_cause=PLATFORM_INSTABILITY"]
+      : ["usable_direction_evidence=1", "passed_candidate_count=3"],
+    recommended_inspection_actions: refused
+      ? ["检查重复定位误差", "检查振动或回差证据", "复核平台稳定性"]
+      : [],
+    case_guidance_status: refused
+      ? "NO_COMPATIBLE_APPROVED_CASE"
+      : "COMPATIBLE_APPROVED_CASES_USED",
+    input_hash: "f".repeat(64),
+    result_hash: "a1".repeat(32),
+    created_at: "2026-07-18T08:03:00.000000Z",
+    constraint_snapshot_version: "tw-parameter-constraints-v1",
+    rule_set_version: "tw-rules-v1",
+    direction_rule_version: "tw-direction-rules-v1",
+    safety_rule_version: "tw-parameter-safety-v1",
+    planning_rule_version: "tw-parameter-planning-v1",
+    feature_definition_version: "tw-feature-definition-v1",
+    diagnostic_result_version: "tw-diagnostic-result-v1",
+    case_retrieval_result_version: refused ? null : "tw-case-retrieval-result-v1",
+    planning_asset_manifest_hash: "b1".repeat(32),
+  };
+  return {
+    task: {
+      ...diagnosisResponse().task,
+      status: refused ? "DIAGNOSED" : "PLAN_READY",
+      stages: stages.map((stage, index) => ({
+        ...stage,
+        availability: refused
+          ? index < 3
+            ? "completed"
+            : index === 3
+              ? "current"
+              : "locked"
+          : index < 4
+            ? "completed"
+            : index === 4
+              ? "current"
+              : "locked",
+      })),
+      parameter_planning_result: planning,
+    },
+    planning,
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -877,7 +1037,7 @@ test("retrieves and displays at most three approved cases with neutral evidence"
   expect(screen.getByText("tw-approved-case-index-v1")).toBeTruthy();
   expect(screen.getByText("tw-case-retrieval-scaler-v1")).toBeTruthy();
   expect(screen.getByText(/不表示根因真实性、因果关系或真实设备适用概率/)).toBeTruthy();
-  expect(screen.queryByText(/推荐采用|一键复用|参数候选|最佳历史方案/)).toBeNull();
+  expect(screen.queryByText(/推荐采用|一键复用|最佳历史方案/)).toBeNull();
   expect(fetchMock).toHaveBeenLastCalledWith(
     "/api/tasks/tw-demo-task-001/case-retrievals",
     {
@@ -980,5 +1140,186 @@ test("renders structured case retrieval errors without replacing diagnosis", asy
 
   expect(await screen.findByText("案例检索资产内容哈希不匹配：index.json")).toBeTruthy();
   expect(screen.getByText("CASE_ASSET_HASH_MISMATCH")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
+});
+
+test("generates and displays three read-only safety-constrained candidates", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(diagnosisResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(retrievalResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(planningResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "检索已审核案例" }));
+  await screen.findByText("tw-aa-approved-011");
+  fireEvent.click(screen.getByRole("button", { name: "生成安全参数候选" }));
+
+  expect(
+    await screen.findByRole("heading", {
+      name: "通过当前证据和安全规则生成的候选方案",
+    }),
+  ).toBeTruthy();
+  expect(screen.getByText("CANDIDATES_AVAILABLE")).toBeTruthy();
+  expect(screen.getAllByRole("listitem", { name: /安全参数候选/ })).toHaveLength(3);
+  expect(screen.getByText("CONSERVATIVE")).toBeTruthy();
+  expect(screen.getByText("STANDARD")).toBeTruthy();
+  expect(screen.getByText("CASE_GUIDED")).toBeTruthy();
+  expect(screen.getAllByText("0.250000").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("0.100000").length).toBeGreaterThan(0);
+  expect(screen.getByText("-0.150000 · -3 ticks")).toBeTruthy();
+  expect(screen.getAllByText("[-1.000000, 1.000000]").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("步长 0.050000").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("最大变化 0.200000").length).toBeGreaterThan(0);
+  expect(screen.getByText("支持案例 3")).toBeTruthy();
+  expect(screen.getAllByText("PASSED").length).toBeGreaterThan(2);
+  expect(screen.getByText("tw-direction-rules-v1")).toBeTruthy();
+  expect(screen.getByText("tw-parameter-safety-v1")).toBeTruthy();
+  expect(screen.getByText("tw-parameter-constraints-v1")).toBeTruthy();
+  expect(screen.getAllByText(/候选哈希/)).toHaveLength(3);
+  expect(screen.getByText(/结果哈希/)).toBeTruthy();
+  expect(screen.queryByText(/最优参数|最佳方案|预测最优|自动写入|已执行/)).toBeNull();
+  expect(screen.queryByRole("button", { name: /确认|采纳|执行/ })).toBeNull();
+  expect(fetchMock).toHaveBeenLastCalledWith(
+    "/api/tasks/tw-demo-task-001/parameter-plans",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        diagnostic_result_id: "tw-diagnostic-fixed",
+        case_retrieval_result_id: "tw-case-retrieval-fixed",
+      }),
+    },
+  );
+});
+
+test("shows accessible parameter planning loading and disables duplicate action", async () => {
+  let resolvePlanning: (response: Response) => void = () => undefined;
+  const pending = new Promise<Response>((resolve) => {
+    resolvePlanning = resolve;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(diagnosisResponse().task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockReturnValueOnce(pending),
+  );
+
+  render(<App />);
+  const action = await screen.findByRole("button", { name: "生成安全参数候选" });
+  fireEvent.click(action);
+
+  expect(await screen.findByText("正在生成方向证据并执行统一安全校验…")).toBeTruthy();
+  expect((action as HTMLButtonElement).disabled).toBe(true);
+  resolvePlanning(
+    new Response(JSON.stringify(planningResponse()), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  expect(await screen.findByText("CANDIDATES_AVAILABLE")).toBeTruthy();
+});
+
+test("renders structured planning refusal and inspection-only actions", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(diagnosisResponse().task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(planningResponse(true)), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+  );
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "生成安全参数候选" }));
+
+  expect(await screen.findByText("PARAMETER_RECOMMENDATION_REFUSED")).toBeTruthy();
+  expect(screen.getByText("PLATFORM_INSTABILITY_INSPECTION_ONLY")).toBeTruthy();
+  expect(screen.getByText("检查重复定位误差")).toBeTruthy();
+  expect(screen.getByText("检查振动或回差证据")).toBeTruthy();
+  expect(screen.getByText("复核平台稳定性")).toBeTruthy();
+  expect(screen.queryAllByRole("listitem", { name: /安全参数候选/ })).toHaveLength(0);
+  expect(screen.getAllByText("DIAGNOSED").length).toBeGreaterThan(0);
+});
+
+test("restores persisted planning as read-only without reopening case retrieval", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify(planningResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
+
+  render(<App />);
+
+  expect(await screen.findByText("CANDIDATES_AVAILABLE")).toBeTruthy();
+  const retrieval = screen.getByRole("button", { name: "案例检索已完成" });
+  expect((retrieval as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getAllByRole("listitem", { name: /安全参数候选/ })).toHaveLength(3);
+});
+
+test("renders structured parameter planning errors without replacing diagnosis", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(diagnosisResponse().task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "PLANNING_ASSET_HASH_MISMATCH",
+              message: "参数规划规则资产内容哈希不匹配。",
+            },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+  );
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "生成安全参数候选" }));
+
+  expect(await screen.findByText("参数规划规则资产内容哈希不匹配。")).toBeTruthy();
+  expect(screen.getByText("PLANNING_ASSET_HASH_MISMATCH")).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
 });

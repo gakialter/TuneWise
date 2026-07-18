@@ -23,6 +23,8 @@ CASE_INDEX_VERSION = "tw-approved-case-index-v1"
 SCALER_VERSION = "tw-case-retrieval-scaler-v1"
 COMPATIBILITY_RULE_VERSION = "tw-product-compatibility-v1"
 RETRIEVAL_RULE_VERSION = "tw-case-retrieval-rules-v1"
+CASE_ACTION_VERSION = "tw-approved-case-action-v1"
+SAFETY_RULE_VERSION = "tw-parameter-safety-v1"
 RULE_SET_VERSION = "tw-rules-v1"
 SOURCE_DATASET_VERSION = "tw-diagnostic-dev-dataset-v1"
 SOURCE_GENERATOR_VERSION = "tw-diagnostic-synthetic-source-v1"
@@ -165,6 +167,17 @@ def _build_case(
         "reviewed_root_cause": reviewed_root_cause,
     }
     knowledge = _case_knowledge(reviewed_root_cause)
+    parameter_names = {
+        "PLANE_TILT": ("pitch", "roll"),
+        "XY_DECENTER": ("x_offset", "y_offset"),
+        "Z_DEFOCUS_CONDITIONAL": ("z_offset",),
+    }.get(reviewed_root_cause, ())
+    parameter_delta_ticks = {}
+    for parameter_name in parameter_names:
+        current_value = feature_row[FEATURE_NAMES.index(f"{parameter_name}_mean")]
+        if current_value != 0:
+            magnitude = min(2 + (index % 3), 2 if parameter_name == "z_offset" else 4)
+            parameter_delta_ticks[parameter_name] = -magnitude if current_value > 0 else magnitude
     case = {
         "case_id": f"tw-aa-approved-{index + 1:03d}",
         "status": "APPROVED",
@@ -180,11 +193,18 @@ def _build_case(
         "historical_action": {
             "context": "VERSIONED_APPROVED_OFFLINE_CASE",
             "summary": knowledge["historical_action"],
+            "action_version": CASE_ACTION_VERSION,
+            "parameter_delta_ticks": parameter_delta_ticks,
+            "historical_safety_status": "PASSED" if parameter_delta_ticks else "NOT_APPLICABLE",
+            "historical_safety_rule_version": SAFETY_RULE_VERSION,
         },
         "historical_simulated_result": {
             "context_label": "规则约束模拟环境中的历史案例结果",
             "status": "SUCCESS",
             "summary": "该历史案例在固定规则与版本的模拟环境中达到准入条件。",
+            "center_mtf_change": "-0.003000",
+            "center_regression_tolerance": "0.010000",
+            "center_within_tolerance": True,
         },
         "applicability_conditions": [
             "仅适用于 AA 工站与兼容产品型号。",
@@ -224,19 +244,48 @@ def _knowledge_payload_valid(case: dict[str, Any]) -> bool:
     applicability = case.get("applicability_conditions")
     return (
         isinstance(historical_action, dict)
-        and set(historical_action) == {"context", "summary"}
+        and set(historical_action)
+        == {
+            "context",
+            "summary",
+            "action_version",
+            "parameter_delta_ticks",
+            "historical_safety_status",
+            "historical_safety_rule_version",
+        }
         and historical_action.get("context") == "VERSIONED_APPROVED_OFFLINE_CASE"
         and isinstance(historical_action.get("summary"), str)
         and bool(historical_action["summary"])
+        and historical_action.get("action_version") == CASE_ACTION_VERSION
+        and isinstance(historical_action.get("parameter_delta_ticks"), dict)
+        and all(
+            name in {"x_offset", "y_offset", "pitch", "roll", "z_offset"}
+            and isinstance(delta, int)
+            and delta != 0
+            for name, delta in historical_action["parameter_delta_ticks"].items()
+        )
+        and historical_action.get("historical_safety_status")
+        in {"PASSED", "NOT_APPLICABLE"}
+        and historical_action.get("historical_safety_rule_version")
+        == SAFETY_RULE_VERSION
         and isinstance(historical_result, dict)
-        and set(historical_result) == {"context_label", "status", "summary"}
+        and set(historical_result)
+        == {
+            "context_label",
+            "status",
+            "summary",
+            "center_mtf_change",
+            "center_regression_tolerance",
+            "center_within_tolerance",
+        }
         and historical_result.get("context_label")
         == "规则约束模拟环境中的历史案例结果"
         and all(
             isinstance(historical_result.get(key), str)
             and bool(historical_result[key])
-            for key in ("status", "summary")
+        for key in ("status", "summary")
         )
+        and historical_result.get("center_within_tolerance") is True
         and isinstance(review_metadata, dict)
         and set(review_metadata)
         == {"approval_origin", "review_record_version", "runtime_state_transition"}

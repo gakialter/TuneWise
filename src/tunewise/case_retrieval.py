@@ -568,12 +568,41 @@ class ApprovedCaseAssetLoader:
         review_metadata = payload["review_metadata"]
         if not (
             isinstance(historical_action, dict)
-            and set(historical_action) == {"context", "summary"}
+            and set(historical_action)
+            == {
+                "context",
+                "summary",
+                "action_version",
+                "parameter_delta_ticks",
+                "historical_safety_status",
+                "historical_safety_rule_version",
+            }
             and historical_action.get("context") == "VERSIONED_APPROVED_OFFLINE_CASE"
             and isinstance(historical_action.get("summary"), str)
             and bool(historical_action["summary"])
+            and historical_action.get("action_version")
+            == "tw-approved-case-action-v1"
+            and isinstance(historical_action.get("parameter_delta_ticks"), dict)
+            and all(
+                name in {"x_offset", "y_offset", "pitch", "roll", "z_offset"}
+                and isinstance(delta, int)
+                and delta != 0
+                for name, delta in historical_action["parameter_delta_ticks"].items()
+            )
+            and historical_action.get("historical_safety_status")
+            in {"PASSED", "NOT_APPLICABLE"}
+            and historical_action.get("historical_safety_rule_version")
+            == "tw-parameter-safety-v1"
             and isinstance(historical_result, dict)
-            and set(historical_result) == {"context_label", "status", "summary"}
+            and set(historical_result)
+            == {
+                "context_label",
+                "status",
+                "summary",
+                "center_mtf_change",
+                "center_regression_tolerance",
+                "center_within_tolerance",
+            }
             and historical_result.get("context_label")
             == "规则约束模拟环境中的历史案例结果"
             and all(
@@ -581,6 +610,7 @@ class ApprovedCaseAssetLoader:
                 and bool(historical_result[key])
                 for key in ("status", "summary")
             )
+            and historical_result.get("center_within_tolerance") is True
             and isinstance(review_metadata, dict)
             and set(review_metadata)
             == {

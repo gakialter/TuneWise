@@ -1764,6 +1764,323 @@ dd {
   line-height: 1.55;
 }
 
+.parameter-planning-section {
+  border-top: var(--border-emphasis);
+  background: var(--surface);
+}
+
+.parameter-planning-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-5);
+  align-items: center;
+  padding: var(--space-5) var(--space-6);
+}
+
+.parameter-planning-intro h2,
+.parameter-planning-result h3,
+.planning-candidate-card h4 {
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.parameter-planning-result {
+  min-width: 0;
+  border-top: var(--border-subtle);
+  background: #fbfdfd;
+}
+
+.planning-status {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-5);
+  align-items: center;
+  padding: var(--space-4) var(--space-6);
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.planning-status-parameter_recommendation_refused {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.planning-status span,
+.planning-status strong,
+.planning-status p {
+  display: block;
+}
+
+.planning-status span,
+.planning-status p {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.planning-status p {
+  margin: var(--space-1) 0 0;
+}
+
+.planning-status code,
+.planning-status strong {
+  overflow-wrap: anywhere;
+}
+
+.planning-evidence-summary,
+.direction-evidence-section,
+.planning-candidates,
+.inspection-actions {
+  min-width: 0;
+  padding: var(--space-5) var(--space-6);
+  border-top: var(--border-subtle);
+}
+
+.planning-evidence-summary ul,
+.inspection-actions ul {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-5);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.direction-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.direction-evidence-card {
+  min-width: 0;
+  padding: var(--space-4);
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.direction-evidence-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.direction-evidence-card header span {
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.direction-evidence-card header .conflict-conflict,
+.direction-evidence-card header .conflict-insufficient_support {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.direction-evidence-card dl {
+  margin: var(--space-3) 0;
+}
+
+.direction-evidence-card dl > div,
+.candidate-parameter-grid dl > div,
+.planning-version-grid > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.direction-evidence-card dt,
+.direction-evidence-card dd,
+.candidate-parameter-grid dt,
+.candidate-parameter-grid dd,
+.planning-version-grid dt,
+.planning-version-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs);
+}
+
+.direction-evidence-card dd,
+.candidate-parameter-grid dd,
+.planning-version-grid dd {
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.direction-evidence-card p,
+.direction-evidence-card small {
+  display: block;
+  margin: var(--space-2) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.direction-evidence-card .direction-conflict {
+  color: var(--danger);
+}
+
+.planning-readonly-note {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.planning-candidate-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.planning-candidate-card {
+  min-width: 0;
+  overflow: hidden;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.planning-candidate-card > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4);
+  border-bottom: var(--border-subtle);
+  background: var(--surface-subtle);
+}
+
+.planning-candidate-card header strong,
+.planning-candidate-card header small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.planning-candidate-card header small,
+.planning-candidate-card header > span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.candidate-order {
+  color: var(--accent-strong) !important;
+  font-size: var(--text-lg) !important;
+  font-weight: 750;
+}
+
+.candidate-parameter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.candidate-parameter-grid > section {
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.candidate-parameter-grid > section + section {
+  border-left: var(--border-subtle);
+}
+
+.candidate-parameter-grid dl {
+  margin: var(--space-3) 0;
+}
+
+.constraint-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: var(--border-subtle);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.supporting-cases,
+.candidate-hash {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-top: var(--border-subtle);
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.supporting-cases strong {
+  margin-right: var(--space-2);
+  color: var(--text-strong);
+}
+
+.validation-details {
+  border-top: var(--border-subtle);
+}
+
+.validation-details summary {
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  color: var(--accent-strong);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.validation-details ul {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-4);
+  list-style: none;
+}
+
+.validation-details li {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.7fr) auto minmax(12rem, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: var(--border-subtle);
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs);
+}
+
+.validation-details li strong {
+  color: var(--accent-strong);
+}
+
+.planning-version-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-4) var(--space-6);
+  border-top: var(--border-subtle);
+  background: var(--surface-dark);
+  color: var(--text-on-dark-muted);
+}
+
+.planning-version-grid > div {
+  display: block;
+  min-width: 0;
+}
+
+.planning-version-grid dd {
+  margin-top: var(--space-1);
+  color: var(--surface);
+  text-align: left;
+}
+
+.parameter-planning-section button:focus-visible,
+.validation-details summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1797,6 +2114,10 @@ dd {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .parameter-planning-intro {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
   .primary-action {
     grid-column: 1 / -1;
   }
@@ -1814,6 +2135,10 @@ dd {
 
   .case-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .planning-version-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .detection-metrics {
@@ -1854,6 +2179,7 @@ dd {
   .import-intro,
   .detection-intro,
   .case-retrieval-intro,
+  .parameter-planning-intro,
   .diagnosis-heading,
   .evidence-banner,
   .identity-panel,
@@ -1867,6 +2193,42 @@ dd {
 
   .case-retrieval-intro {
     grid-template-columns: 1fr;
+  }
+
+  .parameter-planning-intro,
+  .direction-evidence-grid,
+  .candidate-parameter-grid,
+  .planning-version-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planning-status,
+  .planning-candidate-card > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .planning-candidate-card > header {
+    display: flex;
+  }
+
+  .candidate-parameter-grid > section + section {
+    border-top: var(--border-subtle);
+    border-left: 0;
+  }
+
+  .validation-details li {
+    grid-template-columns: 1fr;
+  }
+
+  .planning-evidence-summary,
+  .direction-evidence-section,
+  .planning-candidates,
+  .inspection-actions,
+  .planning-status,
+  .planning-version-grid {
+    padding-right: var(--space-5);
+    padding-left: var(--space-5);
   }
 
   .case-retrieval-status,

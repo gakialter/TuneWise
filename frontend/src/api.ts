@@ -32,6 +32,7 @@ export type Task = {
   data_import?: DataImportSummary | null;
   anomaly_detection?: AnomalyDetectionResult | null;
   diagnostic_result?: DiagnosticResult | null;
+  parameter_planning_result?: ParameterPlanningResult | null;
 };
 
 export type DiagnosticEvidence = {
@@ -110,11 +111,21 @@ export type RetrievedApprovedCase = {
   similarity_display_value: string;
   key_feature_differences: KeyFeatureDifference[];
   reviewed_root_cause: string;
-  historical_action: { context: string; summary: string };
+  historical_action: {
+    context: string;
+    summary: string;
+    action_version?: string;
+    parameter_delta_ticks?: Record<string, number>;
+    historical_safety_status?: string;
+    historical_safety_rule_version?: string;
+  };
   historical_simulated_result: {
     context_label: string;
     status: string;
     summary: string;
+    center_mtf_change?: string;
+    center_regression_tolerance?: string;
+    center_within_tolerance?: boolean;
   };
   applicability_conditions: string[];
   product_model: string;
@@ -151,6 +162,101 @@ export type CaseRetrievalResult = {
 
 export type CaseRetrievalResponse = {
   retrieval: CaseRetrievalResult;
+};
+
+export type ParameterConstraint = {
+  parameter_name: string;
+  nominal_value: string;
+  minimum: string;
+  maximum: string;
+  step: string;
+  maximum_single_plan_delta: string;
+};
+
+export type ParameterDirectionEvidence = {
+  parameter_name: string;
+  current_value: string;
+  current_tick: number | null;
+  nominal_value: string;
+  nominal_tick: number;
+  recommended_direction: "INCREASE" | "DECREASE";
+  supporting_features: string[];
+  supporting_rules: string[];
+  conflicting_features: string[];
+  conflict_status: "NO_CONFLICT" | "CONFLICT" | "INSUFFICIENT_SUPPORT";
+  diagnostic_result_version: string;
+  feature_definition_version: string;
+  direction_rule_version: string;
+  evidence_hash: string;
+};
+
+export type ParameterValidationCheck = {
+  check_code: string;
+  status: "PASSED" | "FAILED";
+  detail: string;
+};
+
+export type ParameterPlanCandidate = {
+  candidate_id: string;
+  generation_type: "CONSERVATIVE" | "STANDARD" | "CASE_GUIDED";
+  generation_sources: string[];
+  root_cause: string;
+  parameter_family: string;
+  current_values: Record<string, string>;
+  proposed_values: Record<string, string>;
+  current_ticks: Record<string, number | null>;
+  proposed_ticks: Record<string, number | null>;
+  deltas: Record<string, string>;
+  delta_ticks: Record<string, number | null>;
+  total_absolute_delta_ticks: number;
+  direction_evidence: ParameterDirectionEvidence[];
+  supporting_case_ids: string[];
+  supporting_case_count: number;
+  constraint_snapshot_version: string;
+  rule_set_version: string;
+  direction_rule_version: string;
+  safety_rule_version: string;
+  diagnostic_result_version: string;
+  case_retrieval_result_version: string | null;
+  validation_checks: ParameterValidationCheck[];
+  validation_status: "PASSED" | "REJECTED";
+  rejection_reasons: string[];
+  candidate_hash: string;
+};
+
+export type ParameterPlanningResult = {
+  planning_result_version: string;
+  planning_result_id: string;
+  task_id: string;
+  diagnostic_result_id: string;
+  case_retrieval_result_id: string | null;
+  top1_root_cause: string;
+  direction_evidence: ParameterDirectionEvidence[];
+  ordered_candidates: ParameterPlanCandidate[];
+  parameter_constraints: ParameterConstraint[];
+  planning_status: "CANDIDATES_AVAILABLE" | "PARAMETER_RECOMMENDATION_REFUSED";
+  refusal_code: string | null;
+  refusal_message: string | null;
+  supporting_evidence: string[];
+  recommended_inspection_actions: string[];
+  case_guidance_status: string;
+  input_hash: string;
+  result_hash: string;
+  created_at: string;
+  constraint_snapshot_version: string;
+  rule_set_version: string;
+  direction_rule_version: string;
+  safety_rule_version: string;
+  planning_rule_version: string;
+  feature_definition_version: string;
+  diagnostic_result_version: string;
+  case_retrieval_result_version: string | null;
+  planning_asset_manifest_hash: string;
+};
+
+export type ParameterPlanningResponse = {
+  task: Task;
+  planning: ParameterPlanningResult;
 };
 
 export type RuleCheck = {
@@ -342,4 +448,28 @@ export async function retrieveApprovedCases(
     );
   }
   return payload as CaseRetrievalResponse;
+}
+
+export async function generateParameterPlans(
+  taskId: string,
+  diagnosticResultId: string,
+  caseRetrievalResultId: string | null,
+): Promise<ParameterPlanningResponse> {
+  const response = await fetch(`/api/tasks/${taskId}/parameter-plans`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      diagnostic_result_id: diagnosticResultId,
+      case_retrieval_result_id: caseRetrievalResultId,
+    }),
+  });
+  const payload = (await response.json()) as ParameterPlanningResponse | ErrorPayload;
+  if (!response.ok) {
+    const error = (payload as ErrorPayload).error;
+    throw new TaskCreationError(
+      error?.code ?? "PARAMETER_PLANNING_FAILED",
+      error?.message ?? "无法生成安全参数候选。",
+    );
+  }
+  return payload as ParameterPlanningResponse;
 }

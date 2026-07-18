@@ -19,7 +19,11 @@ from .diagnosis import (
     DiagnosticGuardError,
     FeatureEngineeringError,
 )
-from .service import TaskService
+from .parameter_planning import (
+    ParameterPlanningAssetError,
+    ParameterPlanningGuardError,
+)
+from .service import PlanningBoundaryAudit, TaskService
 from .importing import ImportValidationError
 from .store import TaskStore
 
@@ -45,6 +49,12 @@ class ApprovedCaseRetrievalRequest(BaseModel):
     top_k: Literal[3]
 
 
+class ParameterPlanningRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diagnostic_result_id: str
+    case_retrieval_result_id: str | None = None
+
+
 def create_app(
     public_asset_root: Path,
     expected_manifest_hash: str,
@@ -56,7 +66,10 @@ def create_app(
     expected_diagnostic_manifest_hash: str | None = None,
     case_asset_root: Path | None = None,
     expected_case_manifest_hash: str | None = None,
+    planning_asset_root: Path | None = None,
+    expected_planning_manifest_hash: str | None = None,
 ) -> FastAPI:
+    boundary_audit = PlanningBoundaryAudit()
     service = TaskService(
         asset_loader=PublicAssetLoader(public_asset_root, expected_manifest_hash),
         store=TaskStore(database_path),
@@ -66,6 +79,9 @@ def create_app(
         expected_diagnostic_manifest_hash=expected_diagnostic_manifest_hash,
         case_asset_root=case_asset_root,
         expected_case_manifest_hash=expected_case_manifest_hash,
+        planning_asset_root=planning_asset_root,
+        expected_planning_manifest_hash=expected_planning_manifest_hash,
+        planning_boundary_audit=boundary_audit,
     )
     app = FastAPI(
         title="TuneWise MVP",
@@ -73,12 +89,8 @@ def create_app(
         docs_url=None,
         redoc_url=None,
     )
-    app.state.boundary_counters = {
-        "simulator_gateway_assemblies": 0,
-        "simulator_gateway_calls": 0,
-        "llm_calls": 0,
-        "external_network_requests": 0,
-    }
+    app.state.planning_boundary_audit = boundary_audit
+    app.state.boundary_counters = boundary_audit.counters
 
     @app.exception_handler(AssetIntegrityError)
     async def handle_asset_integrity_error(
@@ -160,6 +172,42 @@ def create_app(
             content={"error": {"code": error.code, "message": error.message}},
         )
 
+    @app.exception_handler(ParameterPlanningGuardError)
+    async def handle_parameter_planning_guard_error(
+        _request: Request,
+        error: ParameterPlanningGuardError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={
+                "error": {
+                    "code": error.code,
+                    "message": error.message,
+                    "supporting_evidence": error.supporting_evidence,
+                    "recommended_inspection_actions": error.recommended_inspection_actions,
+                    "rule_set_version": error.rule_set_version,
+                }
+            },
+        )
+
+    @app.exception_handler(ParameterPlanningAssetError)
+    async def handle_parameter_planning_asset_error(
+        _request: Request,
+        error: ParameterPlanningAssetError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={
+                "error": {
+                    "code": error.code,
+                    "message": error.message,
+                    "supporting_evidence": error.supporting_evidence,
+                    "recommended_inspection_actions": error.recommended_inspection_actions,
+                    "rule_set_version": error.rule_set_version,
+                }
+            },
+        )
+
     @app.exception_handler(RequestValidationError)
     async def handle_request_validation_error(
         request: Request,
@@ -199,6 +247,45 @@ def create_app(
                     "error": {
                         "code": "CASE_RETRIEVAL_REQUEST_INVALID",
                         "message": "案例检索请求必须引用最新诊断且 top_k 固定为 3。",
+                    }
+                },
+            )
+        if request.url.path.endswith("/parameter-plans"):
+            if any(
+                item.get("type") == "extra_forbidden" for item in error.errors()
+            ):
+                body = error.body if isinstance(error.body, dict) else {}
+                forbidden_fields = tuple(
+                    sorted(
+                        str(item["loc"][-1])
+                        for item in error.errors()
+                        if item.get("type") == "extra_forbidden"
+                    )
+                )
+                structured = service.record_parameter_planning_request_refusal(
+                    request.path_params["task_id"],
+                    str(body.get("diagnostic_result_id", "MISSING")),
+                    body.get("case_retrieval_result_id"),
+                    forbidden_fields,
+                )
+                return JSONResponse(
+                    status_code=422,
+                    content={
+                        "error": {
+                            "code": structured.code,
+                            "message": structured.message,
+                            "supporting_evidence": structured.supporting_evidence,
+                            "recommended_inspection_actions": structured.recommended_inspection_actions,
+                            "rule_set_version": structured.rule_set_version,
+                        }
+                    },
+                )
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error": {
+                        "code": "PARAMETER_PLANNING_REQUEST_INVALID",
+                        "message": "参数规划请求必须引用最新诊断与案例检索结果。",
                     }
                 },
             )
@@ -253,6 +340,22 @@ def create_app(
             request.top_k,
         )
         return {"retrieval": asdict(retrieval)}
+
+    @app.post("/api/tasks/{task_id}/parameter-plans")
+    def generate_parameter_plans(
+        task_id: str,
+        request: ParameterPlanningRequest,
+    ) -> dict:
+        boundary_audit.assert_pristine()
+        try:
+            task, planning = service.generate_parameter_plans(
+                task_id,
+                request.diagnostic_result_id,
+                request.case_retrieval_result_id,
+            )
+        finally:
+            boundary_audit.assert_pristine()
+        return {"task": asdict(task), "planning": asdict(planning)}
 
     if static_root is not None:
         app.mount("/", StaticFiles(directory=static_root, html=True), name="frontend")
