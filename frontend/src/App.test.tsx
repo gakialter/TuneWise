@@ -66,6 +66,25 @@ test("renders backend task identity versions and complete locked workflow", asyn
   expect(screen.queryByText(/登录|注册|权限管理|规则编辑/)).toBeNull();
 });
 
+test("provides keyboard and landmark structure for the task workspace", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(taskResponse), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
+
+  render(<App />);
+
+  const skipLink = await screen.findByRole("link", { name: "跳到主要内容" });
+  expect(skipLink.getAttribute("href")).toBe("#workspace");
+  expect(screen.getByRole("region", { name: "任务概览" })).toBeTruthy();
+  expect(screen.getByRole("navigation", { name: "任务阶段" })).toBeTruthy();
+});
+
 test("renders the task status supplied by the backend response", async () => {
   vi.stubGlobal(
     "fetch",
