@@ -1,0 +1,25 @@
+{
+  "asset_id": "tw-aa-demo-v1",
+  "batch_id": "tw-aa-demo-batch-001",
+  "canonical_observation_hash": "c74206387e06287d6c11ee8a4c6cc46cae867e6967f0c790f5dfe2f5ef940668",
+  "csv_file": "aa-demo-batch.csv",
+  "manifest_version": "1",
+  "product_model": "TW-AA-PROTOTYPE-V1",
+  "random_seed": 20260718,
+  "raw_file_hash": "a7f13e1cf537f0a78c6adb482abd49a0b88e0a5fd96eeb33c0c3cef5957619b3",
+  "rules_file": "import-rules.json",
+  "rules_file_hash": "c611898b9935d8a44cd80c7277c27975bf4ac9dd2e29a217b671b86602b67c6e",
+  "scenario_ref": "scn_c9b8a8d6bd33f72e893f33da85dfeb8e",
+  "scenario_ref_hash": "5c210f78b07a053aebb4ddf1875f1d975d5725e9c9bf028aecedc6677796808a",
+  "station_id": "AA",
+  "versions": {
+    "canonicalizer_version": "tw-canonicalizer-v1",
+    "dataset_version": "tw-dataset-v1",
+    "evaluation_rule_version": "tw-evaluation-v1",
+    "generator_version": "tw-generator-v1",
+    "model_version": "tw-model-v1",
+    "preprocessing_version": "tw-preprocessing-v1",
+    "rule_set_version": "tw-rules-v1",
+    "schema_version": "tw-schema-v1"
+  }
+}

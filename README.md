@@ -1,6 +1,6 @@
 # TuneWise MVP
 
-当前实现范围为 TW-01：启动最小离线应用并显示任务与版本状态。
+当前实现范围为 TW-01 与 TW-02：启动本地离线应用，校验并导入版本化 AA 演示批次，展示可观测 MTF 与派生摘要。
 
 ## Windows 本地启动
 
@@ -37,6 +37,16 @@ npm run build
 
 构建产物写入 `src/tunewise/static`，生产运行时不访问 npm registry。
 
-## TW-01 边界
+## 重新生成演示资产
 
-应用只提供固定演示身份、公共版本资产完整性校验、`CREATED` 任务、SQLite 最小任务状态和只读阶段导航。当前没有 CSV 导入、异常检测、根因排序、案例检索、参数候选、人工确认、模拟回放、登录、RBAC、规则编辑、真实设备或在线服务接口。
+以下命令固定使用 `random_seed = 20260718`，生成 `assets/demo/tw-aa-demo-v1/aa-demo-batch.csv`、`dataset-manifest.json` 与 `import-rules.json`：
+
+```powershell
+.\generate-demo-assets.cmd
+```
+
+相同代码、版本和种子重复运行时，CSV 字节、规范化观测与 SHA-256 哈希保持一致。生成后若版本化资产按计划发生变更，必须同步审阅并更新 `src/tunewise/main.py` 中嵌入的 DatasetManifest 哈希；运行时不会自动接受或修复不匹配资产。
+
+## 当前边界
+
+应用提供固定演示身份、公共版本资产完整性校验、预置 AA CSV/Manifest 导入、双哈希校验、批次/观测/只读快照持久化、派生指标与只读阶段导航。当前没有异常检测、根因排序、证据充足度、案例检索、参数候选、人工确认、模拟回放、登录、RBAC、规则编辑、真实设备或在线服务接口。

@@ -107,7 +107,7 @@ def test_existing_task_is_not_usable_after_public_asset_tampering(tmp_path):
     assert response.json()["error"]["code"] == "PUBLIC_ASSET_HASH_MISMATCH"
 
 
-def test_api_exposes_no_auth_rules_or_later_stage_mutation_routes(tmp_path):
+def test_api_exposes_only_tw01_and_tw02_routes_without_auth_or_later_mutations(tmp_path):
     with make_client(tmp_path) as client:
         openapi = client.get("/openapi.json").json()
         docs_response = client.get("/docs")
@@ -117,6 +117,7 @@ def test_api_exposes_no_auth_rules_or_later_stage_mutation_routes(tmp_path):
         "/api/health",
         "/api/tasks/initial",
         "/api/tasks/{task_id}",
+        "/api/tasks/{task_id}/imports",
     }
     assert openapi.get("components", {}).get("securitySchemes") is None
     assert docs_response.status_code == 404

@@ -30,6 +30,7 @@ class VersionSnapshot:
     application_version: str
     dataset_version: str
     schema_version: str
+    generator_version: str
     rule_set_version: str
     model_version: str
     preprocessing_version: str
@@ -51,12 +52,80 @@ class WorkflowStage:
 
 
 @dataclass(frozen=True, slots=True)
+class ImportValidationSummary:
+    canonical_observation_hash: str
+    csv_schema: str
+    manifest: str
+    raw_file_hash: str
+    versions: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportHashSummary:
+    raw_file_hash: str
+    canonical_observation_hash: str
+    scenario_ref_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class MtfSummary:
+    mtf_center: str
+    mtf_lt: str
+    mtf_rt: str
+    mtf_lb: str
+    mtf_rb: str
+    corner_mtf_min: str
+    corner_mtf_range: str
+    corner_mtf_std: str
+
+
+@dataclass(frozen=True, slots=True)
+class ParameterSummary:
+    x_offset: str
+    y_offset: str
+    pitch: str
+    roll: str
+    z_offset: str
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformSummary:
+    vibration_rms: str
+    repeat_position_error: str
+    calibration_residual_x: str
+    calibration_residual_y: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportSnapshotVersions:
+    control_limit_snapshot: str
+    parameter_constraint_snapshot: str
+    replay_evaluation_rule_snapshot: str
+
+
+@dataclass(frozen=True, slots=True)
+class DataImportSummary:
+    preset_asset_id: str
+    batch_id: str
+    station_id: str
+    product_model: str
+    sample_count: int
+    validation_summary: ImportValidationSummary
+    hashes: ImportHashSummary
+    mtf_summary: MtfSummary
+    parameter_summary: ParameterSummary
+    platform_summary: PlatformSummary
+    snapshot_versions: ImportSnapshotVersions
+
+
+@dataclass(frozen=True, slots=True)
 class Task:
     task_id: str
     status: TaskStatus
     actor: Actor
     versions: VersionSnapshot
     stages: tuple[WorkflowStage, ...]
+    data_import: DataImportSummary | None = None
 
 
 STAGE_LABELS: tuple[tuple[TaskStatus, str], ...] = (

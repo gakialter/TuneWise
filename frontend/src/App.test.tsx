@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 
 import App from "./App";
@@ -29,6 +29,7 @@ const taskResponse = {
     application_version: "0.1.0",
     dataset_version: "tw-dataset-v1",
     schema_version: "tw-schema-v1",
+    generator_version: "tw-generator-v1",
     rule_set_version: "tw-rules-v1",
     model_version: "tw-model-v1",
     preprocessing_version: "tw-preprocessing-v1",
@@ -36,6 +37,63 @@ const taskResponse = {
     canonicalizer_version: "tw-canonicalizer-v1",
   },
   stages,
+};
+
+const importedTaskResponse = {
+  ...taskResponse,
+  status: "DATA_IMPORTED",
+  stages: stages.map((stage, index) => ({
+    ...stage,
+    availability: index === 0 ? "completed" : index === 1 ? "current" : "locked",
+  })),
+  data_import: {
+    preset_asset_id: "tw-aa-demo-v1",
+    batch_id: "tw-aa-demo-batch-001",
+    station_id: "AA",
+    product_model: "TW-AA-PROTOTYPE-V1",
+    sample_count: 24,
+    validation_summary: {
+      canonical_observation_hash: "PASSED",
+      csv_schema: "PASSED",
+      manifest: "PASSED",
+      raw_file_hash: "PASSED",
+      versions: "PASSED",
+    },
+    hashes: {
+      raw_file_hash: "a7f13e1cf537f0a78c6adb482abd49a0b88e0a5fd96eeb33c0c3cef5957619b3",
+      canonical_observation_hash:
+        "c74206387e06287d6c11ee8a4c6cc46cae867e6967f0c790f5dfe2f5ef940668",
+      scenario_ref_hash: "5c210f78b07a053aebb4ddf1875f1d975d5725e9c9bf028aecedc6677796808a",
+    },
+    mtf_summary: {
+      mtf_center: "0.831003",
+      mtf_lt: "0.714968",
+      mtf_rt: "0.752520",
+      mtf_lb: "0.633978",
+      mtf_rb: "0.567683",
+      corner_mtf_min: "0.567683",
+      corner_mtf_range: "0.184837",
+      corner_mtf_std: "0.071709",
+    },
+    parameter_summary: {
+      x_offset: "0.100000",
+      y_offset: "-0.050000",
+      pitch: "0.250000",
+      roll: "-0.200000",
+      z_offset: "0.000000",
+    },
+    platform_summary: {
+      vibration_rms: "0.017882",
+      repeat_position_error: "0.014082",
+      calibration_residual_x: "0.005973",
+      calibration_residual_y: "-0.004003",
+    },
+    snapshot_versions: {
+      control_limit_snapshot: "tw-control-limits-v1",
+      parameter_constraint_snapshot: "tw-parameter-constraints-v1",
+      replay_evaluation_rule_snapshot: "tw-evaluation-v1",
+    },
+  },
 };
 
 afterEach(() => {
@@ -123,4 +181,111 @@ test("shows a clear backend asset integrity error instead of a usable task", asy
     expect(screen.getByText("公共版本资产内容哈希不匹配。")).toBeTruthy();
   });
   expect(screen.queryByText("tw-demo-task-001")).toBeNull();
+});
+
+test("imports the preset batch and renders verified metrics and hashes", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(taskResponse), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(importedTaskResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+  );
+
+  render(<App />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "导入预置 AA 异常批次" }),
+  );
+
+  expect(await screen.findByText("CSV 与 Manifest 校验通过")).toBeTruthy();
+  expect(screen.getAllByText("DATA_IMPORTED")).toHaveLength(2);
+  expect(screen.getByText("0.831003")).toBeTruthy();
+  expect(screen.getAllByText("0.567683")).toHaveLength(2);
+  expect(screen.getByText("0.184837")).toBeTruthy();
+  expect(screen.getByText("0.071709")).toBeTruthy();
+  expect(screen.getByText("c74206387e06")).toBeTruthy();
+  expect(screen.getByText("24 条观测")).toBeTruthy();
+  expect(screen.getByText("已完成")).toBeTruthy();
+});
+
+test("shows an accessible loading state while import validation is pending", async () => {
+  let resolveImport: (response: Response) => void = () => undefined;
+  const pendingImport = new Promise<Response>((resolve) => {
+    resolveImport = resolve;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(taskResponse), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockReturnValueOnce(pendingImport),
+  );
+
+  render(<App />);
+  const button = await screen.findByRole("button", { name: "导入预置 AA 异常批次" });
+  fireEvent.click(button);
+
+  expect(await screen.findByText("正在校验 CSV、Manifest 与内容哈希…")).toBeTruthy();
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  resolveImport(
+    new Response(JSON.stringify(importedTaskResponse), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  expect(await screen.findByText("CSV 与 Manifest 校验通过")).toBeTruthy();
+});
+
+test("renders structured import errors inline without window alert", async () => {
+  const alert = vi.fn();
+  vi.stubGlobal("alert", alert);
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(taskResponse), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "RAW_FILE_HASH_MISMATCH",
+              message: "CSV 原始文件哈希与 DatasetManifest 不匹配。",
+            },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+  );
+
+  render(<App />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "导入预置 AA 异常批次" }),
+  );
+
+  expect(
+    await screen.findByText("CSV 原始文件哈希与 DatasetManifest 不匹配。"),
+  ).toBeTruthy();
+  expect(screen.getByText("RAW_FILE_HASH_MISMATCH")).toBeTruthy();
+  expect(screen.getAllByText("CREATED")).toHaveLength(2);
+  expect(alert).not.toHaveBeenCalled();
 });

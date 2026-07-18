@@ -1,0 +1,63 @@
+{
+  "control_limits": {
+    "asymmetry_limit": "0.120000",
+    "center_lower_limit": "0.720000",
+    "corner_lower_limit": "0.620000",
+    "corner_std_limit": "0.050000",
+    "rule_set_version": "tw-rules-v1",
+    "snapshot_version": "tw-control-limits-v1"
+  },
+  "parameter_constraints": {
+    "constraints": {
+      "pitch": {
+        "maximum": "1.000000",
+        "maximum_single_plan_delta": "0.200000",
+        "minimum": "-1.000000",
+        "nominal_value": "0.000000",
+        "step": "0.050000"
+      },
+      "roll": {
+        "maximum": "1.000000",
+        "maximum_single_plan_delta": "0.200000",
+        "minimum": "-1.000000",
+        "nominal_value": "0.000000",
+        "step": "0.050000"
+      },
+      "x_offset": {
+        "maximum": "1.000000",
+        "maximum_single_plan_delta": "0.200000",
+        "minimum": "-1.000000",
+        "nominal_value": "0.000000",
+        "step": "0.050000"
+      },
+      "y_offset": {
+        "maximum": "1.000000",
+        "maximum_single_plan_delta": "0.200000",
+        "minimum": "-1.000000",
+        "nominal_value": "0.000000",
+        "step": "0.050000"
+      },
+      "z_offset": {
+        "maximum": "1.000000",
+        "maximum_single_plan_delta": "0.100000",
+        "minimum": "-1.000000",
+        "nominal_value": "0.000000",
+        "step": "0.050000"
+      }
+    },
+    "product_model": "TW-AA-PROTOTYPE-V1",
+    "rule_set_version": "tw-rules-v1",
+    "snapshot_version": "tw-parameter-constraints-v1"
+  },
+  "replay_evaluation_rules": {
+    "asymmetry_limit": "0.120000",
+    "center_lower_limit": "0.720000",
+    "center_regression_tolerance": "0.010000",
+    "corner_lower_limit": "0.620000",
+    "evaluation_rule_version": "tw-evaluation-v1",
+    "minimum_corner_min_improvement": "0.020000",
+    "minimum_range_reduction": "0.020000",
+    "minimum_std_reduction": "0.010000",
+    "snapshot_version": "tw-evaluation-v1"
+  }
+}

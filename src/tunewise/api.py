@@ -6,10 +6,17 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict
 
 from .assets import AssetIntegrityError, PublicAssetLoader
 from .service import TaskService
+from .importing import ImportValidationError
 from .store import TaskStore
+
+
+class PresetImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    preset_asset_id: str
 
 
 def create_app(
@@ -17,10 +24,14 @@ def create_app(
     expected_manifest_hash: str,
     database_path: Path,
     static_root: Path | None = None,
+    demo_asset_root: Path | None = None,
+    expected_dataset_manifest_hash: str | None = None,
 ) -> FastAPI:
     service = TaskService(
         asset_loader=PublicAssetLoader(public_asset_root, expected_manifest_hash),
         store=TaskStore(database_path),
+        demo_asset_root=demo_asset_root,
+        expected_dataset_manifest_hash=expected_dataset_manifest_hash,
     )
     app = FastAPI(
         title="TuneWise MVP",
@@ -39,6 +50,16 @@ def create_app(
             content={"error": {"code": error.code, "message": error.message}},
         )
 
+    @app.exception_handler(ImportValidationError)
+    async def handle_import_validation_error(
+        _request: Request,
+        error: ImportValidationError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={"error": {"code": error.code, "message": error.message}},
+        )
+
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "mode": "offline"}
@@ -53,6 +74,10 @@ def create_app(
         if task is None:
             raise HTTPException(status_code=404, detail="调机任务不存在。")
         return asdict(task)
+
+    @app.post("/api/tasks/{task_id}/imports")
+    def import_preset(task_id: str, request: PresetImportRequest) -> dict:
+        return asdict(service.import_preset(task_id, request.preset_asset_id))
 
     if static_root is not None:
         app.mount("/", StaticFiles(directory=static_root, html=True), name="frontend")

@@ -53,13 +53,20 @@ def test_runtime_source_has_no_network_simulator_or_isolated_asset_dependency():
 
     assert imported_roots <= {
         "__future__",
+        "csv",
         "dataclasses",
+        "datetime",
+        "decimal",
         "enum",
         "fastapi",
         "hashlib",
+        "io",
         "json",
         "pathlib",
+        "pydantic",
+        "re",
         "sqlite3",
+        "statistics",
         "typing",
     }
     assert not {
