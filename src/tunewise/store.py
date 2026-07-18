@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .domain import (
@@ -19,10 +19,27 @@ from .domain import (
     VersionSnapshot,
     WorkflowStage,
 )
+from .detection import (
+    AnomalyDetectionRecord,
+    deserialize_detection_record,
+)
 
 
 class ImportSnapshotConflictError(RuntimeError):
     pass
+
+
+class DetectionResultConflictError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class StoredDetectionInput:
+    manifest: dict | None
+    batch: dict | None
+    measurements: tuple[dict, ...]
+    control_limits: dict | None
+    spc_rules: dict | None
 
 
 class TaskStore:
@@ -48,6 +65,7 @@ class TaskStore:
                 "control_limit_snapshots",
                 "parameter_constraint_snapshots",
                 "replay_evaluation_rule_snapshots",
+                "spc_rule_snapshots",
             ):
                 connection.execute(
                     f"CREATE TABLE IF NOT EXISTS {table} ("
@@ -57,6 +75,18 @@ class TaskStore:
                 "CREATE TABLE IF NOT EXISTS measurements ("
                 "task_id TEXT NOT NULL, sample_index INTEGER NOT NULL, "
                 "payload_json TEXT NOT NULL, PRIMARY KEY (task_id, sample_index))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS anomaly_detection_results ("
+                "detection_result_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, "
+                "input_data_version TEXT NOT NULL, rule_set_version TEXT NOT NULL, "
+                "input_hash TEXT NOT NULL, result_hash TEXT NOT NULL, "
+                "created_at TEXT NOT NULL, payload_json TEXT NOT NULL, "
+                "UNIQUE(task_id, input_data_version, rule_set_version, input_hash))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS current_anomaly_detection_results ("
+                "task_id TEXT PRIMARY KEY, detection_result_id TEXT NOT NULL UNIQUE)"
             )
 
     def get(self, task_id: str) -> Task | None:
@@ -92,6 +122,7 @@ class TaskStore:
         control_limits: dict,
         parameter_constraints: dict,
         replay_evaluation_rules: dict,
+        spc_rules: dict | None = None,
     ) -> Task:
         task_payload = json.dumps(asdict(task), ensure_ascii=False, separators=(",", ":"))
         with self._connect() as connection:
@@ -112,6 +143,8 @@ class TaskStore:
                 ("parameter_constraint_snapshots", parameter_constraints),
                 ("replay_evaluation_rule_snapshots", replay_evaluation_rules),
             )
+            if spc_rules is not None:
+                records = (*records, ("spc_rule_snapshots", spc_rules))
             for table, payload in records:
                 connection.execute(
                     f"INSERT INTO {table} (task_id, payload_json) VALUES (?, ?)",
@@ -138,6 +171,104 @@ class TaskStore:
             raise RuntimeError("导入结果保存失败。")
         return stored
 
+    def get_detection_input(self, task_id: str) -> StoredDetectionInput:
+        with self._connect() as connection:
+            payloads: dict[str, dict | None] = {}
+            for key, table in (
+                ("manifest", "dataset_manifests"),
+                ("batch", "batches"),
+                ("control_limits", "control_limit_snapshots"),
+                ("spc_rules", "spc_rule_snapshots"),
+            ):
+                row = connection.execute(
+                    f"SELECT payload_json FROM {table} WHERE task_id = ?",
+                    (task_id,),
+                ).fetchone()
+                payloads[key] = None if row is None else json.loads(row["payload_json"])
+            measurement_rows = connection.execute(
+                "SELECT payload_json FROM measurements WHERE task_id = ? "
+                "ORDER BY sample_index",
+                (task_id,),
+            ).fetchall()
+        return StoredDetectionInput(
+            manifest=payloads["manifest"],
+            batch=payloads["batch"],
+            measurements=tuple(
+                json.loads(row["payload_json"]) for row in measurement_rows
+            ),
+            control_limits=payloads["control_limits"],
+            spc_rules=payloads["spc_rules"],
+        )
+
+    def save_detection(
+        self,
+        task: Task,
+        record: AnomalyDetectionRecord,
+    ) -> tuple[Task, AnomalyDetectionRecord]:
+        task_payload = json.dumps(asdict(task), ensure_ascii=False, separators=(",", ":"))
+        record_payload = json.dumps(
+            asdict(record), ensure_ascii=False, separators=(",", ":")
+        )
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current_result = connection.execute(
+                "SELECT result.payload_json FROM current_anomaly_detection_results current "
+                "JOIN anomaly_detection_results result "
+                "ON result.detection_result_id = current.detection_result_id "
+                "WHERE current.task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if current_result is not None:
+                stored_record = deserialize_detection_record(
+                    json.loads(current_result["payload_json"])
+                )
+                if stored_record.detection_result_id != record.detection_result_id:
+                    raise DetectionResultConflictError(
+                        "任务已有不同的当前检测结果。"
+                    )
+                stored_task = self.get(task.task_id)
+                if stored_task is None:
+                    raise RuntimeError("检测结果关联任务不存在。")
+                return stored_task, stored_record
+            current_task = connection.execute(
+                "SELECT payload_json FROM tasks WHERE task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if current_task is None:
+                raise RuntimeError("调机任务不存在。")
+            current_status = json.loads(current_task["payload_json"])["status"]
+            if current_status != TaskStatus.DATA_IMPORTED:
+                raise DetectionResultConflictError("当前任务状态不允许保存检测结果。")
+            connection.execute(
+                "INSERT INTO anomaly_detection_results ("
+                "detection_result_id, task_id, input_data_version, rule_set_version, "
+                "input_hash, result_hash, created_at, payload_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.detection_result_id,
+                    record.task_id,
+                    record.input_data_version,
+                    record.rule_set_version,
+                    record.input_hash,
+                    record.result_hash,
+                    record.created_at,
+                    record_payload,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO current_anomaly_detection_results "
+                "(task_id, detection_result_id) VALUES (?, ?)",
+                (record.task_id, record.detection_result_id),
+            )
+            connection.execute(
+                "UPDATE tasks SET payload_json = ? WHERE task_id = ?",
+                (task_payload, task.task_id),
+            )
+        stored_task = self.get(task.task_id)
+        if stored_task is None:
+            raise RuntimeError("检测结果保存失败。")
+        return stored_task, record
+
     @staticmethod
     def _deserialize(payload_json: str) -> Task:
         payload = json.loads(payload_json)
@@ -161,6 +292,7 @@ class TaskStore:
                     **import_payload["snapshot_versions"]
                 ),
             )
+        detection_payload = payload.get("anomaly_detection")
         return Task(
             task_id=payload["task_id"],
             status=TaskStatus(payload["status"]),
@@ -175,4 +307,9 @@ class TaskStore:
                 for stage in payload["stages"]
             ),
             data_import=data_import,
+            anomaly_detection=(
+                None
+                if detection_payload is None
+                else deserialize_detection_record(detection_payload)
+            ),
         )

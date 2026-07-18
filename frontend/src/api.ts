@@ -30,6 +30,66 @@ export type Task = {
   versions: VersionSnapshot;
   stages: WorkflowStage[];
   data_import?: DataImportSummary | null;
+  anomaly_detection?: AnomalyDetectionResult | null;
+};
+
+export type RuleCheck = {
+  rule_id: string;
+  status: "PASSED" | "FAILED" | "NOT_EVALUATED";
+  actual: string | null;
+  threshold: string | null;
+  operator: string | null;
+  detail: string;
+};
+
+export type AnomalyDetectionResult = {
+  detection_result_id: string;
+  task_id: string;
+  batch_id: string;
+  anomaly_result:
+    | "TARGET_ANOMALY"
+    | "NORMAL"
+    | "NON_TARGET_GLOBAL_DEGRADATION"
+    | "INSUFFICIENT_DATA";
+  aggregate_metrics: {
+    mtf_center: string | null;
+    mtf_lt: string | null;
+    mtf_rt: string | null;
+    mtf_lb: string | null;
+    mtf_rb: string | null;
+    corner_mtf_min: string | null;
+    corner_mtf_range: string | null;
+    corner_mtf_std: string | null;
+  };
+  control_limits: {
+    center_lower_limit: string;
+    corner_lower_limit: string;
+    asymmetry_limit: string;
+    corner_std_limit: string;
+  };
+  rule_checks: RuleCheck[];
+  persistence_evidence: {
+    sample_count: number;
+    violating_sample_count: number;
+    violation_ratio: string;
+    maximum_consecutive_violations: number;
+    minimum_consecutive_violations: number;
+    minimum_violation_ratio: string;
+    consecutive_condition_met: boolean;
+    ratio_condition_met: boolean;
+  };
+  control_limit_snapshot_version: string;
+  rule_set_version: string;
+  rule_snapshot_version: string;
+  input_data_version: string;
+  input_hash: string;
+  result_hash: string;
+  created_at: string;
+};
+
+export type DetectionResponse = {
+  task: Task;
+  detection: AnomalyDetectionResult;
 };
 
 export type DataImportSummary = {
@@ -102,4 +162,24 @@ export async function importPresetAsset(taskId: string): Promise<Task> {
     );
   }
   return payload as Task;
+}
+
+export async function runAnomalyDetection(
+  taskId: string,
+  inputDataVersion: string,
+): Promise<DetectionResponse> {
+  const response = await fetch(`/api/tasks/${taskId}/detections`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input_data_version: inputDataVersion }),
+  });
+  const payload = (await response.json()) as DetectionResponse | ErrorPayload;
+  if (!response.ok) {
+    const error = (payload as ErrorPayload).error;
+    throw new TaskCreationError(
+      error?.code ?? "ANOMALY_DETECTION_FAILED",
+      error?.message ?? "无法运行异常检测。",
+    );
+  }
+  return payload as DetectionResponse;
 }

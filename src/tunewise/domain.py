@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .detection import AnomalyDetectionRecord
 
 
 class TaskStatus(StrEnum):
@@ -126,6 +130,7 @@ class Task:
     versions: VersionSnapshot
     stages: tuple[WorkflowStage, ...]
     data_import: DataImportSummary | None = None
+    anomaly_detection: AnomalyDetectionRecord | None = None
 
 
 STAGE_LABELS: tuple[tuple[TaskStatus, str], ...] = (
