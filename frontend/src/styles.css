@@ -385,6 +385,256 @@ a:focus-visible,
   overflow: hidden;
 }
 
+.diagnosis-panel {
+  margin-top: var(--space-6);
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 0.45rem 1.8rem rgba(25, 48, 55, 0.055);
+  overflow: hidden;
+}
+
+.diagnosis-result {
+  border-top: var(--border-subtle);
+  background: #fbfdfd;
+}
+
+.evidence-banner,
+.diagnosis-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-6);
+}
+
+.evidence-banner {
+  align-items: center;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.evidence-banner.evidence-insufficient {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.evidence-banner h3,
+.diagnosis-heading h2,
+.root-cause-card h4,
+.diagnosis-footer-grid h4 {
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.evidence-banner p,
+.diagnosis-heading p,
+.diagnosis-footer-grid p,
+.empty-evidence {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.evidence-banner > code {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.diagnosis-heading {
+  align-items: end;
+  border-bottom: var(--border-subtle);
+}
+
+.diagnosis-heading > p {
+  max-width: 28rem;
+  text-align: right;
+}
+
+.root-cause-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-5) var(--space-6);
+  list-style: none;
+}
+
+.root-cause-card {
+  min-width: 0;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.root-cause-card > header {
+  display: grid;
+  grid-template-columns: auto minmax(12rem, 1fr) auto auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: var(--border-subtle);
+}
+
+.root-cause-rank {
+  color: var(--accent-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 750;
+}
+
+.root-cause-card header strong,
+.root-cause-card header small {
+  display: block;
+}
+
+.root-cause-card header > div > strong {
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+}
+
+.root-cause-card header small {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.adjustability {
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.adjustable {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.inspection-only {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+
+.relative-score {
+  min-width: 7rem;
+  text-align: right;
+}
+
+.relative-score span,
+.relative-score small {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.relative-score strong {
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+}
+
+.candidate-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+.candidate-evidence-grid section {
+  min-width: 0;
+}
+
+.candidate-evidence-grid h4,
+.diagnosis-footer-grid h4 {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.structured-list,
+.contribution-list,
+.evidence-check-summary {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.structured-list li,
+.contribution-list li,
+.evidence-check-summary li {
+  padding: var(--space-2) 0;
+  border-top: var(--border-subtle);
+}
+
+.structured-list strong,
+.structured-list span,
+.contribution-list small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.structured-list strong,
+.contribution-list strong {
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.structured-list span,
+.contribution-list small {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.contribution-list li > div,
+.evidence-check-summary li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.contribution-list code {
+  color: var(--accent-strong);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.diagnosis-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-6);
+  border-top: var(--border-subtle);
+  background: var(--surface-subtle);
+}
+
+.diagnosis-footer-grid dl {
+  margin: 0;
+}
+
+.diagnosis-footer-grid dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.diagnosis-footer-grid dd {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.evidence-check-summary span,
+.evidence-check-summary strong {
+  font-size: var(--text-xs);
+}
+
+.evidence-check-summary strong {
+  color: var(--accent-strong);
+}
+
 .detection-intro {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1264,8 +1514,13 @@ dd {
 
   .metrics-layout,
   .status-hash-grid,
-  .detection-evidence-grid {
+  .detection-evidence-grid,
+  .diagnosis-footer-grid {
     grid-template-columns: 1fr;
+  }
+
+  .candidate-evidence-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .detection-metrics {
@@ -1305,6 +1560,8 @@ dd {
   .task-overview,
   .import-intro,
   .detection-intro,
+  .diagnosis-heading,
+  .evidence-banner,
   .identity-panel,
   .versions-panel {
     padding: var(--space-5);
@@ -1312,6 +1569,36 @@ dd {
 
   .import-intro {
     grid-template-columns: 1fr;
+  }
+
+  .evidence-banner,
+  .diagnosis-heading,
+  .root-cause-card > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .root-cause-card > header {
+    display: flex;
+  }
+
+  .relative-score {
+    text-align: left;
+  }
+
+  .diagnosis-heading > p {
+    text-align: left;
+  }
+
+  .candidate-evidence-grid {
+    grid-template-columns: 1fr;
+    padding: var(--space-4);
+  }
+
+  .root-cause-list,
+  .diagnosis-footer-grid {
+    padding-right: var(--space-4);
+    padding-left: var(--space-4);
   }
 
   .preset-asset-card {

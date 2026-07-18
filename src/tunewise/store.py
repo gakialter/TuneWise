@@ -23,6 +23,7 @@ from .detection import (
     AnomalyDetectionRecord,
     deserialize_detection_record,
 )
+from .diagnosis import DiagnosticResultRecord, deserialize_diagnostic_result
 
 
 class ImportSnapshotConflictError(RuntimeError):
@@ -30,6 +31,10 @@ class ImportSnapshotConflictError(RuntimeError):
 
 
 class DetectionResultConflictError(RuntimeError):
+    pass
+
+
+class DiagnosticResultConflictError(RuntimeError):
     pass
 
 
@@ -87,6 +92,20 @@ class TaskStore:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS current_anomaly_detection_results ("
                 "task_id TEXT PRIMARY KEY, detection_result_id TEXT NOT NULL UNIQUE)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS diagnostic_results ("
+                "diagnostic_result_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, "
+                "detection_result_id TEXT NOT NULL, input_data_version TEXT NOT NULL, "
+                "input_feature_hash TEXT NOT NULL, model_version TEXT NOT NULL, "
+                "preprocessing_version TEXT NOT NULL, evidence_rule_version TEXT NOT NULL, "
+                "result_hash TEXT NOT NULL, created_at TEXT NOT NULL, payload_json TEXT NOT NULL, "
+                "UNIQUE(task_id, detection_result_id, input_feature_hash, model_version, "
+                "preprocessing_version, evidence_rule_version))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS current_diagnostic_results ("
+                "task_id TEXT PRIMARY KEY, diagnostic_result_id TEXT NOT NULL UNIQUE)"
             )
 
     def get(self, task_id: str) -> Task | None:
@@ -269,6 +288,73 @@ class TaskStore:
             raise RuntimeError("检测结果保存失败。")
         return stored_task, record
 
+    def save_diagnosis(
+        self,
+        task: Task,
+        record: DiagnosticResultRecord,
+    ) -> tuple[Task, DiagnosticResultRecord]:
+        task_payload = json.dumps(asdict(task), ensure_ascii=False, separators=(",", ":"))
+        record_payload = json.dumps(asdict(record), ensure_ascii=False, separators=(",", ":"))
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                "SELECT result.payload_json FROM current_diagnostic_results current "
+                "JOIN diagnostic_results result "
+                "ON result.diagnostic_result_id = current.diagnostic_result_id "
+                "WHERE current.task_id = ?",
+                (task.task_id,),
+            ).fetchone()
+            if current is not None:
+                stored_record = deserialize_diagnostic_result(json.loads(current["payload_json"]))
+                if stored_record.diagnostic_result_id != record.diagnostic_result_id:
+                    raise DiagnosticResultConflictError(
+                        "任务已有不同的当前诊断结果。"
+                    )
+                stored_task = self.get(task.task_id)
+                if stored_task is None:
+                    raise RuntimeError("诊断结果关联任务不存在。")
+                return stored_task, stored_record
+            current_task = connection.execute(
+                "SELECT payload_json FROM tasks WHERE task_id = ?", (task.task_id,)
+            ).fetchone()
+            if current_task is None:
+                raise RuntimeError("调机任务不存在。")
+            if json.loads(current_task["payload_json"])["status"] != TaskStatus.ANOMALY_DETECTED:
+                raise DiagnosticResultConflictError("当前任务状态不允许保存诊断结果。")
+            connection.execute(
+                "INSERT INTO diagnostic_results ("
+                "diagnostic_result_id, task_id, detection_result_id, input_data_version, "
+                "input_feature_hash, model_version, preprocessing_version, "
+                "evidence_rule_version, result_hash, created_at, payload_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.diagnostic_result_id,
+                    record.task_id,
+                    record.detection_result_id,
+                    record.input_data_version,
+                    record.input_feature_hash,
+                    record.model_version,
+                    record.preprocessing_version,
+                    record.evidence_rule_version,
+                    record.result_hash,
+                    record.created_at,
+                    record_payload,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO current_diagnostic_results (task_id, diagnostic_result_id) "
+                "VALUES (?, ?)",
+                (record.task_id, record.diagnostic_result_id),
+            )
+            connection.execute(
+                "UPDATE tasks SET payload_json = ? WHERE task_id = ?",
+                (task_payload, task.task_id),
+            )
+        stored_task = self.get(task.task_id)
+        if stored_task is None:
+            raise RuntimeError("诊断结果保存失败。")
+        return stored_task, record
+
     @staticmethod
     def _deserialize(payload_json: str) -> Task:
         payload = json.loads(payload_json)
@@ -293,6 +379,7 @@ class TaskStore:
                 ),
             )
         detection_payload = payload.get("anomaly_detection")
+        diagnostic_payload = payload.get("diagnostic_result")
         return Task(
             task_id=payload["task_id"],
             status=TaskStatus(payload["status"]),
@@ -311,5 +398,10 @@ class TaskStore:
                 None
                 if detection_payload is None
                 else deserialize_detection_record(detection_payload)
+            ),
+            diagnostic_result=(
+                None
+                if diagnostic_payload is None
+                else deserialize_diagnostic_result(diagnostic_payload)
             ),
         )

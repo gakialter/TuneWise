@@ -23,7 +23,16 @@ from .detection import (
     serialize_spc_rule_snapshot,
 )
 from .importing import DemoDatasetImporter, ImportValidationError
+from .diagnosis import (
+    DiagnosticAssetLoader,
+    DiagnosticGuardError,
+    DiagnosticResultRecord,
+    FeatureEngineer,
+    RootCauseDiagnoser,
+    record_diagnosis,
+)
 from .store import (
+    DiagnosticResultConflictError,
     DetectionResultConflictError,
     ImportSnapshotConflictError,
     StoredDetectionInput,
@@ -46,6 +55,8 @@ class TaskService:
         demo_asset_root: Path | None = None,
         expected_dataset_manifest_hash: str | None = None,
         clock: SystemClock | None = None,
+        diagnostic_asset_root: Path | None = None,
+        expected_diagnostic_manifest_hash: str | None = None,
     ) -> None:
         self._asset_loader = asset_loader
         self._store = store
@@ -53,6 +64,8 @@ class TaskService:
         self._demo_asset_root = demo_asset_root
         self._expected_dataset_manifest_hash = expected_dataset_manifest_hash
         self._clock = clock or SystemClock()
+        self._diagnostic_asset_root = diagnostic_asset_root
+        self._expected_diagnostic_manifest_hash = expected_diagnostic_manifest_hash
 
     def create_initial_task(self) -> Task:
         assets = self._asset_loader.load()
@@ -213,6 +226,112 @@ class TaskService:
             raise DetectionGuardError(
                 "DETECTION_RESULT_CONFLICT",
                 "当前任务的检测结果已发生冲突。",
+            ) from error
+
+    def diagnose_root_cause(
+        self,
+        task_id: str,
+        detection_result_id: str,
+    ) -> tuple[Task, DiagnosticResultRecord]:
+        assets = self._asset_loader.load()
+        task = self._store.get(task_id)
+        if task is None:
+            raise DiagnosticGuardError("TASK_NOT_FOUND", "调机任务不存在。", 404)
+        if task.actor != assets.actor or task.versions != assets.versions:
+            raise AssetIntegrityError(
+                "TASK_ASSET_SNAPSHOT_MISMATCH",
+                "任务绑定的公共版本快照与当前资产不一致。",
+            )
+        current = task.diagnostic_result
+        if task.status is TaskStatus.DIAGNOSED and current is not None:
+            if current.detection_result_id != detection_result_id:
+                raise DiagnosticGuardError(
+                    "DIAGNOSTIC_CURRENT_RESULT_CONFLICT",
+                    "当前任务已有不同检测引用的诊断结果。",
+                )
+            return task, current
+        if task.status is not TaskStatus.ANOMALY_DETECTED:
+            raise DiagnosticGuardError(
+                "DIAGNOSTIC_TASK_STATE_INVALID",
+                "只有 ANOMALY_DETECTED 任务可以运行根因诊断。",
+            )
+        detection = task.anomaly_detection
+        if detection is None:
+            raise DiagnosticGuardError(
+                "DIAGNOSTIC_DETECTION_MISSING", "当前任务缺少最新异常检测结果。"
+            )
+        if detection.detection_result_id != detection_result_id:
+            raise DiagnosticGuardError(
+                "DIAGNOSTIC_DETECTION_STALE", "请求的检测结果不是当前任务最新版本。"
+            )
+        if detection.anomaly_result is not AnomalyResult.TARGET_ANOMALY:
+            raise DiagnosticGuardError(
+                "DIAGNOSTIC_ANOMALY_NOT_TARGET",
+                "只有 TARGET_ANOMALY 检测结果可以运行根因诊断。",
+            )
+        source = self._store.get_detection_input(task_id)
+        detection_input = self._validated_detection_input(task, source)
+        if (
+            detection.input_data_version != detection_input.input_data_version
+            or detection.input_hash != detection_input.input_hash
+            or detection.rule_set_version != detection_input.rule_snapshot.rule_set_version
+            or detection.control_limit_snapshot_version
+            != detection_input.control_limits.snapshot_version
+        ):
+            raise DiagnosticGuardError(
+                "DIAGNOSTIC_DETECTION_STALE",
+                "检测结果与当前输入、控制限或规则版本不一致。",
+            )
+        if self._diagnostic_asset_root is None or self._expected_diagnostic_manifest_hash is None:
+            raise DiagnosticGuardError(
+                "DIAGNOSTIC_ASSETS_MISSING", "固定诊断资产未装配。"
+            )
+        diagnostic_assets = DiagnosticAssetLoader(
+            self._diagnostic_asset_root,
+            self._expected_diagnostic_manifest_hash,
+        ).load()
+        if (
+            diagnostic_assets.model.get("model_version") != task.versions.model_version
+            or diagnostic_assets.preprocessing.get("preprocessing_version")
+            != task.versions.preprocessing_version
+        ):
+            raise DiagnosticGuardError(
+                "DIAGNOSTIC_ASSET_VERSION_STALE",
+                "诊断模型或预处理器版本不是任务当前版本。",
+            )
+        features = FeatureEngineer().derive(detection_input.measurements)
+        decision = RootCauseDiagnoser(diagnostic_assets).diagnose(
+            features, detection_input.control_limits
+        )
+        record = record_diagnosis(
+            decision,
+            task_id=task.task_id,
+            detection_result_id=detection.detection_result_id,
+            input_data_version=detection_input.input_data_version,
+            input_feature_hash=features.input_feature_hash,
+            anomaly_result=detection.anomaly_result.value,
+            created_at=self._clock.now(),
+        )
+        diagnosed_task = replace(
+            task,
+            status=TaskStatus.DIAGNOSED,
+            stages=workflow_for(TaskStatus.DIAGNOSED),
+            diagnostic_result=record,
+        )
+        try:
+            return self._store.save_diagnosis(diagnosed_task, record)
+        except DiagnosticResultConflictError as error:
+            stored = self._store.get(task_id)
+            if (
+                stored is not None
+                and stored.diagnostic_result is not None
+                and stored.diagnostic_result.diagnostic_result_id
+                == record.diagnostic_result_id
+            ):
+                return stored, stored.diagnostic_result
+            raise DiagnosticGuardError(
+                "DIAGNOSTIC_RESULT_CONFLICT",
+                "当前任务的诊断结果已发生冲突。",
             ) from error
 
     def _validated_detection_input(

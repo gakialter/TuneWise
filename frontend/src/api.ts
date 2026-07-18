@@ -31,6 +31,67 @@ export type Task = {
   stages: WorkflowStage[];
   data_import?: DataImportSummary | null;
   anomaly_detection?: AnomalyDetectionResult | null;
+  diagnostic_result?: DiagnosticResult | null;
+};
+
+export type DiagnosticEvidence = {
+  rule_id: string;
+  status: "PASSED" | "FAILED";
+  detail: string;
+};
+
+export type DiagnosticCandidate = {
+  rank: number;
+  root_cause: string;
+  normalized_score: string;
+  raw_logit: string;
+  adjustability: "ADJUSTABLE" | "INSPECTION_ONLY";
+  matched_explicit_rules: DiagnosticEvidence[];
+  key_observations: { feature_name: string; value: string; summary: string }[];
+  positive_logit_contributions: {
+    feature_name: string;
+    feature_index: number;
+    standardized_feature_value: string;
+    class_coefficient: string;
+    contribution: string;
+    description: string;
+  }[];
+  conflict_evidence: DiagnosticEvidence[];
+  model_version: string;
+  preprocessing_version: string;
+  feature_definition_version: string;
+};
+
+export type DiagnosticResult = {
+  diagnostic_result_version: string;
+  diagnostic_result_id: string;
+  task_id: string;
+  detection_result_id: string;
+  input_data_version: string;
+  input_feature_hash: string;
+  anomaly_result: "TARGET_ANOMALY";
+  ordered_top3: DiagnosticCandidate[];
+  evidence_status: "SUFFICIENT_EVIDENCE" | "INSUFFICIENT_EVIDENCE";
+  evidence_checks: DiagnosticEvidence[];
+  z_gate_result: {
+    status: "PASSED" | "REMOVED";
+    passed: boolean;
+    checks: DiagnosticEvidence[];
+    removed_category: string | null;
+  };
+  model_version: string;
+  preprocessing_version: string;
+  feature_definition_version: string;
+  evidence_rule_version: string;
+  input_asset_hashes: Record<string, string>;
+  result_hash: string;
+  created_at: string;
+  parameter_candidate_count: number;
+};
+
+export type DiagnosisResponse = {
+  task: Task;
+  diagnostic: DiagnosticResult;
 };
 
 export type RuleCheck = {
@@ -182,4 +243,24 @@ export async function runAnomalyDetection(
     );
   }
   return payload as DetectionResponse;
+}
+
+export async function runRootCauseDiagnosis(
+  taskId: string,
+  detectionResultId: string,
+): Promise<DiagnosisResponse> {
+  const response = await fetch(`/api/tasks/${taskId}/diagnoses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ detection_result_id: detectionResultId }),
+  });
+  const payload = (await response.json()) as DiagnosisResponse | ErrorPayload;
+  if (!response.ok) {
+    const error = (payload as ErrorPayload).error;
+    throw new TaskCreationError(
+      error?.code ?? "ROOT_CAUSE_DIAGNOSIS_FAILED",
+      error?.message ?? "无法运行根因诊断。",
+    );
+  }
+  return payload as DiagnosisResponse;
 }

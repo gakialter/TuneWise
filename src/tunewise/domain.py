@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .detection import AnomalyDetectionRecord
+    from .diagnosis import DiagnosticResultRecord
 
 
 class TaskStatus(StrEnum):
@@ -131,6 +132,7 @@ class Task:
     stages: tuple[WorkflowStage, ...]
     data_import: DataImportSummary | None = None
     anomaly_detection: AnomalyDetectionRecord | None = None
+    diagnostic_result: DiagnosticResultRecord | None = None
 
 
 STAGE_LABELS: tuple[tuple[TaskStatus, str], ...] = (

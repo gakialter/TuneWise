@@ -207,6 +207,99 @@ function detectionResponse(anomalyResult: string) {
   return { task, detection };
 }
 
+const diagnosticResult = {
+  diagnostic_result_version: "tw-diagnostic-result-v1",
+  diagnostic_result_id: "tw-diagnostic-fixed",
+  task_id: "tw-demo-task-001",
+  detection_result_id: "tw-detection-fixed",
+  input_data_version: "tw-dataset-v1",
+  input_feature_hash: "3".repeat(64),
+  anomaly_result: "TARGET_ANOMALY",
+  ordered_top3: [
+    ["PLANE_TILT", "0.982100", "ADJUSTABLE"],
+    ["XY_DECENTER", "0.012300", "ADJUSTABLE"],
+    ["REFERENCE_DRIFT", "0.004200", "INSPECTION_ONLY"],
+  ].map(([root_cause, normalized_score, adjustability], index) => ({
+    rank: index + 1,
+    root_cause,
+    normalized_score,
+    raw_logit: `${5 - index}.000000`,
+    adjustability,
+    matched_explicit_rules: [
+      { rule_id: `${root_cause}_RULE`, status: "PASSED", detail: "显式规则已命中。" },
+    ],
+    key_observations: [
+      { feature_name: "top_bottom_difference", value: "0.132914", summary: "上下差异达到空间支持阈值。" },
+    ],
+    positive_logit_contributions: [
+      {
+        feature_name: "top_bottom_difference",
+        feature_index: 48,
+        standardized_feature_value: "2.000000000000",
+        class_coefficient: "0.500000000000",
+        contribution: "1.000000",
+        description: "该特征对当前类别 logit 的贡献",
+      },
+      {
+        feature_name: "pitch_mean",
+        feature_index: 24,
+        standardized_feature_value: "1.500000000000",
+        class_coefficient: "0.400000000000",
+        contribution: "0.600000",
+        description: "该特征对当前类别 logit 的贡献",
+      },
+      {
+        feature_name: "roll_mean",
+        feature_index: 27,
+        standardized_feature_value: "-1.200000000000",
+        class_coefficient: "-0.300000000000",
+        contribution: "0.360000",
+        description: "该特征对当前类别 logit 的贡献",
+      },
+    ],
+    conflict_evidence: [],
+    model_version: "tw-model-v1",
+    preprocessing_version: "tw-preprocessing-v1",
+    feature_definition_version: "tw-feature-definition-v1",
+  })),
+  evidence_status: "SUFFICIENT_EVIDENCE",
+  evidence_checks: [
+    { rule_id: "TOP1_SCORE_MINIMUM", status: "PASSED", detail: "Top-1 相对分数满足阈值。" },
+  ],
+  z_gate_result: {
+    status: "REMOVED",
+    passed: false,
+    removed_category: "Z_DEFOCUS_CONDITIONAL",
+    checks: [
+      { rule_id: "Z_CENTER_NEAR_LOWER_LIMIT", status: "FAILED", detail: "中心 MTF 未接近下限。" },
+    ],
+  },
+  model_version: "tw-model-v1",
+  preprocessing_version: "tw-preprocessing-v1",
+  feature_definition_version: "tw-feature-definition-v1",
+  evidence_rule_version: "tw-evidence-rules-v1",
+  input_asset_hashes: { "model.json": "4".repeat(64) },
+  result_hash: "5".repeat(64),
+  created_at: "2026-07-18T08:01:00.000000Z",
+  parameter_candidate_count: 0,
+};
+
+function diagnosisResponse(evidenceStatus = "SUFFICIENT_EVIDENCE") {
+  const diagnostic = { ...diagnosticResult, evidence_status: evidenceStatus };
+  return {
+    task: {
+      ...detectionResponse("TARGET_ANOMALY").task,
+      status: "DIAGNOSED",
+      stages: stages.map((stage, index) => ({
+        ...stage,
+        availability: index < 3 ? "completed" : index === 3 ? "current" : "locked",
+      })),
+      diagnostic_result: diagnostic,
+    },
+    diagnostic,
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -519,5 +612,148 @@ test("renders structured detection errors inline without window alert", async ()
     await screen.findByText("持久化 Measurement 与导入输入哈希不一致。"),
   ).toBeTruthy();
   expect(screen.getByText("DETECTION_INPUT_HASH_MISMATCH")).toBeTruthy();
+  expect(alert).not.toHaveBeenCalled();
+});
+
+test("runs diagnosis and renders backend Top-3 structured evidence and versions", async () => {
+  const detectedTask = detectionResponse("TARGET_ANOMALY").task;
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(detectedTask), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(diagnosisResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "运行根因诊断" }));
+
+  expect(await screen.findByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
+  expect(screen.getAllByText("PLANE_TILT").length).toBeGreaterThan(0);
+  expect(screen.getByText("98.21%")).toBeTruthy();
+  expect(screen.getAllByText("可调").length).toBeGreaterThan(0);
+  expect(screen.getByText("仅排查")).toBeTruthy();
+  expect(screen.getAllByText("该特征对当前类别 logit 的贡献").length).toBeGreaterThan(0);
+  expect(screen.getByText("SUFFICIENT_EVIDENCE")).toBeTruthy();
+  expect(screen.getByText("tw-feature-definition-v1")).toBeTruthy();
+  expect(screen.getByText("tw-evidence-rules-v1")).toBeTruthy();
+  expect(screen.getByText(/555555555555/)).toBeTruthy();
+  expect(screen.getAllByText("DIAGNOSED")).toHaveLength(2);
+  expect(fetchMock).toHaveBeenLastCalledWith(
+    "/api/tasks/tw-demo-task-001/diagnoses",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ detection_result_id: "tw-detection-fixed" }),
+    },
+  );
+});
+
+test("shows accessible diagnosis loading and disables duplicate action", async () => {
+  let resolveDiagnosis: (response: Response) => void = () => undefined;
+  const pending = new Promise<Response>((resolve) => {
+    resolveDiagnosis = resolve;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(detectionResponse("TARGET_ANOMALY").task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockReturnValueOnce(pending),
+  );
+
+  render(<App />);
+  const action = await screen.findByRole("button", { name: "运行根因诊断" });
+  fireEvent.click(action);
+
+  expect(
+    await screen.findByText("正在校验固定诊断资产并计算 Top-3…"),
+  ).toBeTruthy();
+  expect((action as HTMLButtonElement).disabled).toBe(true);
+  resolveDiagnosis(
+    new Response(JSON.stringify(diagnosisResponse()), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  expect(await screen.findByText("SUFFICIENT_EVIDENCE")).toBeTruthy();
+});
+
+test("renders insufficient evidence protection while preserving Top-3", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(detectionResponse("TARGET_ANOMALY").task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(diagnosisResponse("INSUFFICIENT_EVIDENCE")), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+  );
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "运行根因诊断" }));
+
+  expect(await screen.findByText("INSUFFICIENT_EVIDENCE")).toBeTruthy();
+  expect(screen.getByText("诊断证据不足，仅供排查")).toBeTruthy();
+  expect(screen.getByText(/参数候选数量固定为 0/)).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
+  expect(screen.getAllByText("DIAGNOSED")).toHaveLength(2);
+  expect(screen.getAllByText("未开放").length).toBeGreaterThan(0);
+});
+
+test("renders structured diagnosis errors inline without window alert", async () => {
+  const alert = vi.fn();
+  vi.stubGlobal("alert", alert);
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(detectionResponse("TARGET_ANOMALY").task), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "DIAGNOSTIC_ASSET_HASH_MISMATCH",
+              message: "诊断资产内容哈希不匹配：model.json",
+            },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+  );
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "运行根因诊断" }));
+
+  expect(
+    await screen.findByText("诊断资产内容哈希不匹配：model.json"),
+  ).toBeTruthy();
+  expect(screen.getByText("DIAGNOSTIC_ASSET_HASH_MISMATCH")).toBeTruthy();
   expect(alert).not.toHaveBeenCalled();
 });

@@ -9,6 +9,9 @@ EXPECTED_PUBLIC_MANIFEST_HASH = (
 EXPECTED_DATASET_MANIFEST_HASH = (
     "d66077f880e6d4c470772be30a771ca20d26520ab39c08fc4f4340fa4e31950c"
 )
+EXPECTED_DIAGNOSTIC_MANIFEST_HASH = (
+    "d2d287fcd830771c3b8c6e91f41152d950ea2a02820107c1ca802fb268b5ed4b"
+)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -20,6 +23,8 @@ def create_production_app(repository_root: Path = REPOSITORY_ROOT):
         static_root=repository_root / "src" / "tunewise" / "static",
         demo_asset_root=repository_root / "assets" / "demo" / "tw-aa-demo-v1",
         expected_dataset_manifest_hash=EXPECTED_DATASET_MANIFEST_HASH,
+        diagnostic_asset_root=repository_root / "assets" / "diagnostic" / "tw-diagnostic-v1",
+        expected_diagnostic_manifest_hash=EXPECTED_DIAGNOSTIC_MANIFEST_HASH,
     )
 
 

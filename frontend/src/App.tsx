@@ -5,6 +5,8 @@ import {
   createInitialTask,
   importPresetAsset,
   runAnomalyDetection,
+  runRootCauseDiagnosis,
+  DiagnosticResult,
   Task,
   TaskCreationError,
 } from "./api";
@@ -33,6 +35,11 @@ type ImportState =
   | { kind: "error"; code: string; message: string };
 
 type DetectionState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "error"; code: string; message: string };
+
+type DiagnosisState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "error"; code: string; message: string };
@@ -214,12 +221,135 @@ function DetectionResultView({
   );
 }
 
+const rootCauseLabels: Record<string, string> = {
+  PLANE_TILT: "Pitch/Roll 平面倾斜",
+  XY_DECENTER: "X/Y 方向偏心",
+  PLATFORM_INSTABILITY: "AA 平台测量波动",
+  REFERENCE_DRIFT: "夹具基准或设备标定漂移",
+  Z_DEFOCUS_CONDITIONAL: "条件性 Z 向焦点偏移",
+};
+
+function DiagnosisResultView({ diagnostic }: { diagnostic: DiagnosticResult }) {
+  const sufficient = diagnostic.evidence_status === "SUFFICIENT_EVIDENCE";
+  return (
+    <div className="diagnosis-result">
+      <div className={`evidence-banner ${sufficient ? "evidence-sufficient" : "evidence-insufficient"}`} role="status">
+        <div>
+          <span className="result-code">{diagnostic.evidence_status}</span>
+          <h3>{sufficient ? "诊断证据满足冻结规则" : "诊断证据不足，仅供排查"}</h3>
+          <p>
+            {sufficient
+              ? "Top-1 得分、类别间距、兼容规则与完整性检查均通过。"
+              : "仍展示 Top-3 排查顺序；参数候选数量固定为 0，后续流程保持关闭。"}
+          </p>
+        </div>
+        <code title={diagnostic.result_hash}>业务结果 {diagnostic.result_hash.slice(0, 12)}</code>
+      </div>
+
+      <div className="diagnosis-heading">
+        <div>
+          <p className="section-kicker">固定模型 · 结构化解释</p>
+          <h2>Top-3 根因排查顺序</h2>
+        </div>
+        <p>相对分数用于当前五类候选排序，不表示真实故障概率。</p>
+      </div>
+
+      <ol className="root-cause-list">
+        {diagnostic.ordered_top3.map((candidate) => (
+          <li key={candidate.root_cause} className="root-cause-card">
+            <header>
+              <span className="root-cause-rank">#{candidate.rank}</span>
+              <div>
+                <strong>{candidate.root_cause}</strong>
+                <small>{rootCauseLabels[candidate.root_cause] ?? candidate.root_cause}</small>
+              </div>
+              <span className={`adjustability ${candidate.adjustability === "ADJUSTABLE" ? "adjustable" : "inspection-only"}`}>
+                {candidate.adjustability === "ADJUSTABLE" ? "可调" : "仅排查"}
+              </span>
+              <div className="relative-score">
+                <span>相对分数</span>
+                <strong>{(Number(candidate.normalized_score) * 100).toFixed(2)}%</strong>
+                <small>logit {candidate.raw_logit}</small>
+              </div>
+            </header>
+            <div className="candidate-evidence-grid">
+              <section>
+                <h4>显式规则与关键观测</h4>
+                <ul className="structured-list">
+                  {candidate.matched_explicit_rules.map((rule) => (
+                    <li key={rule.rule_id}><strong>{rule.rule_id}</strong><span>{rule.detail}</span></li>
+                  ))}
+                  {candidate.key_observations.map((item) => (
+                    <li key={item.feature_name}><strong>{item.feature_name}</strong><span>{item.summary}</span></li>
+                  ))}
+                </ul>
+              </section>
+              <section>
+                <h4>主要正向 logit 贡献</h4>
+                <ol className="contribution-list">
+                  {candidate.positive_logit_contributions.map((item) => (
+                    <li key={item.feature_index}>
+                      <div><strong>{item.feature_name}</strong><code>{item.contribution}</code></div>
+                      <small>{item.description}</small>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+              <section>
+                <h4>冲突证据</h4>
+                {candidate.conflict_evidence.length ? (
+                  <ul className="structured-list conflict-list">
+                    {candidate.conflict_evidence.map((item) => (
+                      <li key={item.rule_id}><strong>{item.rule_id}</strong><span>{item.detail}</span></li>
+                    ))}
+                  </ul>
+                ) : <p className="empty-evidence">未发现当前类别的显式规则冲突。</p>}
+              </section>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <div className="diagnosis-footer-grid">
+        <section>
+          <h4>Z 类硬门控</h4>
+          <strong>{diagnostic.z_gate_result.status}</strong>
+          <p>
+            {diagnostic.z_gate_result.passed
+              ? "中心、四角整体下降及非主导不对称条件均成立。"
+              : "Z 类已从展示候选移除，其余类别已重新归一化。"}
+          </p>
+        </section>
+        <section>
+          <h4>诊断资产版本</h4>
+          <dl>
+            <div><dt>结果</dt><dd>{diagnostic.diagnostic_result_version}</dd></div>
+            <div><dt>模型</dt><dd>{diagnostic.model_version}</dd></div>
+            <div><dt>预处理器</dt><dd>{diagnostic.preprocessing_version}</dd></div>
+            <div><dt>特征定义</dt><dd>{diagnostic.feature_definition_version}</dd></div>
+            <div><dt>证据规则</dt><dd>{diagnostic.evidence_rule_version}</dd></div>
+          </dl>
+        </section>
+        <section>
+          <h4>证据检查</h4>
+          <ul className="evidence-check-summary">
+            {diagnostic.evidence_checks.map((check) => (
+              <li key={check.rule_id}><span>{check.rule_id}</span><strong>{check.status}</strong></li>
+            ))}
+          </ul>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [importState, setImportState] = useState<ImportState>({ kind: "idle" });
   const [detectionState, setDetectionState] = useState<DetectionState>({
     kind: "idle",
   });
+  const [diagnosisState, setDiagnosisState] = useState<DiagnosisState>({ kind: "idle" });
 
   useEffect(() => {
     let active = true;
@@ -278,6 +408,7 @@ function App() {
       setState({ kind: "ready", task: importedTask });
       setImportState({ kind: "idle" });
       setDetectionState({ kind: "idle" });
+      setDiagnosisState({ kind: "idle" });
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setImportState({ kind: "error", code: error.code, message: error.message });
@@ -313,6 +444,29 @@ function App() {
         kind: "error",
         code: "ANOMALY_DETECTION_FAILED",
         message: "本地异常检测服务暂时不可用。",
+      });
+    }
+  }
+
+  async function handleDiagnosis() {
+    if (!task.anomaly_detection) return;
+    setDiagnosisState({ kind: "loading" });
+    try {
+      const response = await runRootCauseDiagnosis(
+        task.task_id,
+        task.anomaly_detection.detection_result_id,
+      );
+      setState({ kind: "ready", task: response.task });
+      setDiagnosisState({ kind: "idle" });
+    } catch (error: unknown) {
+      if (error instanceof TaskCreationError) {
+        setDiagnosisState({ kind: "error", code: error.code, message: error.message });
+        return;
+      }
+      setDiagnosisState({
+        kind: "error",
+        code: "ROOT_CAUSE_DIAGNOSIS_FAILED",
+        message: "本地根因诊断服务暂时不可用。",
       });
     }
   }
@@ -533,6 +687,43 @@ function App() {
 
             {task.anomaly_detection && (
               <DetectionResultView detection={task.anomaly_detection} />
+            )}
+          </section>
+        )}
+
+        {task.anomaly_detection?.anomaly_result === "TARGET_ANOMALY" && (
+          <section className="diagnosis-panel" aria-labelledby="diagnosis-title">
+            <div className="detection-intro">
+              <div>
+                <p className="section-kicker">固定预处理器与逻辑回归</p>
+                <h2 id="diagnosis-title">根因诊断与证据充足度</h2>
+                <p className="import-copy">
+                  服务端按固定特征顺序执行离线推理、Z 类硬门控、稳定 Top-3 与结构化解释。
+                </p>
+              </div>
+              <button
+                className="primary-action detection-action"
+                type="button"
+                disabled={diagnosisState.kind === "loading" || Boolean(task.diagnostic_result)}
+                onClick={handleDiagnosis}
+              >
+                {task.diagnostic_result ? "诊断已完成" : "运行根因诊断"}
+              </button>
+            </div>
+            {diagnosisState.kind === "loading" && (
+              <div className="import-progress" role="status" aria-live="polite">
+                <span className="inline-loader" />
+                <span>正在校验固定诊断资产并计算 Top-3…</span>
+              </div>
+            )}
+            {diagnosisState.kind === "error" && (
+              <div className="inline-error" role="alert">
+                <div><strong>诊断已拒绝</strong><p>{diagnosisState.message}</p></div>
+                <code>{diagnosisState.code}</code>
+              </div>
+            )}
+            {task.diagnostic_result && (
+              <DiagnosisResultView diagnostic={task.diagnostic_result} />
             )}
           </section>
         )}
