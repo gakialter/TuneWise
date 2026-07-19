@@ -1788,9 +1788,6 @@ class TaskService:
             approved_case_index_version = case_manifest["case_index_version"]
             source_hashes["case_asset_manifest"] = case_asset_hashes["manifest.json"]
             source_hashes["case_retrieval_result"] = retrieval.result_hash
-            source_hashes["case_retrieval_safe_payload"] = (
-                retrieval.safe_payload_hash
-            )
             source_hashes["case_collection"] = case_asset_hashes[
                 "approved-cases.json"
             ]

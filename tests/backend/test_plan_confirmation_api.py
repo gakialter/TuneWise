@@ -1073,6 +1073,28 @@ def test_tw06_retrieval_rows_receive_safe_confirmation_hashes_on_upgrade(
     assert response.status_code == 200
 
 
+def test_confirmed_plan_hash_is_stable_across_independent_runtime_timestamps(
+    tmp_path,
+) -> None:
+    hashes = []
+    for name in ("first", "second"):
+        client, _app = make_planning_client(tmp_path / name)
+        with client:
+            task, planning = _prepare_plan_ready(client)
+            candidate = planning["ordered_candidates"][0]
+            response = client.post(
+                f"/api/tasks/{task['task_id']}/confirmed-plans",
+                json={
+                    "candidate_id": candidate["candidate_id"],
+                    "candidate_hash": candidate["candidate_hash"],
+                },
+            )
+        assert response.status_code == 200
+        hashes.append(response.json()["confirmed_plan"]["confirmed_plan_hash"])
+
+    assert hashes[0] == hashes[1]
+
+
 def test_stale_status_payload_cannot_be_rewritten_to_valid(tmp_path) -> None:
     client, _app = make_planning_client(tmp_path)
     with client:
