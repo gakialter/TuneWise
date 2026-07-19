@@ -1,0 +1,2 @@
+assets/**/*.csv text eol=lf
+assets/**/*.json text eol=lf
