@@ -34,6 +34,7 @@ export type Task = {
   diagnostic_result?: DiagnosticResult | null;
   parameter_planning_result?: ParameterPlanningResult | null;
   confirmed_plan?: ConfirmedPlan | null;
+  replay_result?: ReplayResult | null;
 };
 
 export type DiagnosticEvidence = {
@@ -315,6 +316,92 @@ export type PlanConfirmationResponse = {
   confirmed_plan: ConfirmedPlan;
 };
 
+export type ReplayMetrics = {
+  sample_count: number;
+  mtf_center_mean: string;
+  mtf_center_std: string;
+  mtf_lt_mean: string;
+  mtf_rt_mean: string;
+  mtf_lb_mean: string;
+  mtf_rb_mean: string;
+  corner_mtf_mean: string;
+  corner_mtf_min: string;
+  corner_mtf_range: string;
+  corner_mtf_std: string;
+  center_corner_gap: string;
+  control_limit_pass: boolean;
+  target_anomaly_triggered: boolean;
+  parameter_summary: Record<string, string>;
+  metric_definition_version: string;
+  standard_deviation_method: "POPULATION";
+};
+
+export type ReplayEvaluationCheck = {
+  check_id: string;
+  metric: string;
+  before_value: string | boolean;
+  after_value: string | boolean;
+  delta: string;
+  threshold: string | null;
+  tolerance: string | null;
+  status: "PASSED" | "FAILED";
+  rule_version: string;
+  explanation_template_key: string;
+};
+
+export type ReplayResult = {
+  replay_result_id: string;
+  replay_result_version: string;
+  task_id: string;
+  confirmed_plan_id: string;
+  confirmed_plan_hash: string;
+  candidate_id: string;
+  candidate_hash: string;
+  request_idempotency_key_hash: string;
+  replay_status: "SUCCESS" | "PARTIAL_IMPROVEMENT" | "NO_IMPROVEMENT" | "REGRESSION";
+  attempt_count: number;
+  dataset_version: string;
+  schema_version: string;
+  generator_version: string;
+  rule_set_version: string;
+  model_version: string;
+  simulator_version: string;
+  replay_scenario_schema_version: string;
+  scenario_mapping_version: string;
+  scenario_ref_hash: string;
+  disturbance_sequence_hash: string;
+  replay_seed_hash: string;
+  baseline_input_hash: string;
+  intervention_input_hash: string;
+  canonicalizer_version: string;
+  replay_result_canonicalizer_version: string;
+  imported_baseline_canonical_hash: string;
+  simulated_baseline_canonical_hash: string;
+  baseline_reproduction_status: "PASSED";
+  baseline_metrics: ReplayMetrics;
+  intervention_metrics: ReplayMetrics;
+  metric_deltas: Record<string, string>;
+  evaluation_checks: ReplayEvaluationCheck[];
+  replay_evaluation_rule_version: string;
+  input_asset_hashes: Record<string, string>;
+  pairing_invariants: Record<string, string>;
+  before_observation_hash: string;
+  after_observation_hash: string;
+  baseline_output_hash: string;
+  intervention_output_hash: string;
+  result_hash: string;
+  created_at: string;
+  completed_at: string;
+  disclaimer_version: string;
+  disclaimer: string;
+  no_device_write_notice: string;
+};
+
+export type ReplayResponse = {
+  task: Task;
+  replay_result: ReplayResult;
+};
+
 export type RuleCheck = {
   rule_id: string;
   status: "PASSED" | "FAILED" | "NOT_EVALUATED";
@@ -552,4 +639,30 @@ export async function confirmParameterPlan(
     );
   }
   return payload as PlanConfirmationResponse;
+}
+
+export async function runPairedReplay(
+  taskId: string,
+  confirmedPlanId: string,
+  confirmedPlanHash: string,
+): Promise<ReplayResponse> {
+  const response = await fetch(`/api/tasks/${taskId}/replays`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      task_id: taskId,
+      confirmed_plan_id: confirmedPlanId,
+      confirmed_plan_hash: confirmedPlanHash,
+      request_idempotency_key: `tw-replay-${confirmedPlanId}`,
+    }),
+  });
+  const payload = (await response.json()) as ReplayResponse | ErrorPayload;
+  if (!response.ok) {
+    const error = (payload as ErrorPayload).error;
+    throw new TaskCreationError(
+      error?.code ?? "PAIRED_REPLAY_FAILED",
+      error?.message ?? "无法运行确定性配对模拟干预回放。",
+    );
+  }
+  return payload as ReplayResponse;
 }

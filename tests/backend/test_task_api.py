@@ -107,7 +107,7 @@ def test_existing_task_is_not_usable_after_public_asset_tampering(tmp_path):
     assert response.json()["error"]["code"] == "PUBLIC_ASSET_HASH_MISMATCH"
 
 
-def test_api_exposes_only_routes_through_tw07_without_auth_or_later_mutations(tmp_path):
+def test_api_exposes_only_routes_through_tw08_without_auth_or_later_mutations(tmp_path):
     with make_client(tmp_path) as client:
         openapi = client.get("/openapi.json").json()
         docs_response = client.get("/docs")
@@ -123,6 +123,7 @@ def test_api_exposes_only_routes_through_tw07_without_auth_or_later_mutations(tm
         "/api/tasks/{task_id}/case-retrievals",
         "/api/tasks/{task_id}/parameter-plans",
         "/api/tasks/{task_id}/confirmed-plans",
+        "/api/tasks/{task_id}/replays",
         "/api/tasks/{task_id}/audit-events",
     }
     assert openapi.get("components", {}).get("securitySchemes") is None

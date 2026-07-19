@@ -116,6 +116,13 @@ class AuditEvent:
     actual_hash: str | None
     expected_version: str | None
     actual_version: str | None
+    replay_result_id: str | None = None
+    replay_result_hash: str | None = None
+    simulator_version: str | None = None
+    evaluation_rule_version: str | None = None
+    baseline_reproduction_status: str | None = None
+    replay_status: str | None = None
+    attempt_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

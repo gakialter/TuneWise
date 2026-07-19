@@ -18,6 +18,9 @@ EXPECTED_CASE_MANIFEST_HASH = (
 EXPECTED_PLANNING_MANIFEST_HASH = (
     "fc73d61a29bcfbe89ab3b8f34cd0cf7436ff10c0716c59be8882b21be2881f4b"
 )
+EXPECTED_REPLAY_MANIFEST_HASH = (
+    "8d4b3582e9509bf0a1b1b1aa44a0d43fbbd5972f8ab0fe497dcd5712a4ee8824"
+)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -35,6 +38,8 @@ def create_production_app(repository_root: Path = REPOSITORY_ROOT):
         expected_case_manifest_hash=EXPECTED_CASE_MANIFEST_HASH,
         planning_asset_root=repository_root / "assets" / "planning" / "tw-parameter-planning-v1",
         expected_planning_manifest_hash=EXPECTED_PLANNING_MANIFEST_HASH,
+        replay_asset_root=repository_root / "assets" / "simulator-private" / "tw-replay-simulator-v1",
+        expected_replay_manifest_hash=EXPECTED_REPLAY_MANIFEST_HASH,
     )
 
 

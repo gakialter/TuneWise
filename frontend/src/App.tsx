@@ -9,8 +9,10 @@ import {
   generateParameterPlans,
   importPresetAsset,
   ParameterPlanningResult,
+  ReplayResult,
   retrieveApprovedCases,
   runAnomalyDetection,
+  runPairedReplay,
   runRootCauseDiagnosis,
   DiagnosticResult,
   Task,
@@ -66,6 +68,11 @@ type PlanConfirmationState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "success"; plan: ConfirmedPlan }
+  | { kind: "error"; code: string; message: string };
+
+type ReplayState =
+  | { kind: "idle" }
+  | { kind: "loading" }
   | { kind: "error"; code: string; message: string };
 
 const candidateTerminalConfirmationCodes = new Set([
@@ -516,6 +523,7 @@ function ParameterPlanningResultView({
   confirmedPlan,
   invalidCandidateIds,
   confirmationContextInvalid,
+  replayCompleted,
 }: {
   result: ParameterPlanningResult;
   actor: Task["actor"];
@@ -526,6 +534,7 @@ function ParameterPlanningResultView({
   confirmedPlan?: ConfirmedPlan | null;
   invalidCandidateIds: ReadonlySet<string>;
   confirmationContextInvalid: boolean;
+  replayCompleted: boolean;
 }) {
   const constraints = Object.fromEntries(
     result.parameter_constraints.map((constraint) => [constraint.parameter_name, constraint]),
@@ -783,7 +792,9 @@ function ParameterPlanningResultView({
                 </dl>
               </div>
               <p className="confirmation-disclaimer">
-                此操作只冻结离线候选方案；尚未进行模拟回放；未向真实设备写入任何参数。
+                {replayCompleted
+                  ? "该 ConfirmedPlan 已用于下方离线模拟回放；没有任何设备参数下发行为。"
+                  : "此操作只冻结离线候选方案；尚未进行模拟回放；没有任何设备参数下发行为。"}
               </p>
             </>
           )}
@@ -812,6 +823,83 @@ function ParameterPlanningResultView({
   );
 }
 
+const replayMetricRows: { key: keyof ReplayResult["baseline_metrics"]; label: string }[] = [
+  { key: "mtf_center_mean", label: "中心 MTF 均值" },
+  { key: "corner_mtf_min", label: "最差角落 MTF" },
+  { key: "corner_mtf_range", label: "四角极差" },
+  { key: "corner_mtf_std", label: "四角标准差" },
+  { key: "center_corner_gap", label: "中心与四角差距" },
+];
+
+function ReplayResultView({ result }: { result: ReplayResult }) {
+  return (
+    <section className="replay-result" aria-labelledby="replay-result-title">
+      <div className="replay-result-heading">
+        <div>
+          <p className="section-kicker">确定性配对模拟干预回放</p>
+          <h2 id="replay-result-title">回放结果</h2>
+        </div>
+        <strong className={`replay-status replay-status-${result.replay_status.toLowerCase()}`}>
+          {result.replay_status}
+        </strong>
+      </div>
+
+      <div className="baseline-reproduction" role="status">
+        <strong>基线重现通过</strong>
+        <span>导入基线与模拟基线的 canonical observation hash 完全一致</span>
+      </div>
+
+      <div className="replay-metric-table-wrap">
+        <table className="replay-metric-table">
+          <caption>固定模型、场景和扰动下的指标对照</caption>
+          <thead>
+            <tr><th scope="col">指标</th><th scope="col">调整前</th><th scope="col">调整后</th><th scope="col">变化量</th></tr>
+          </thead>
+          <tbody>
+            {replayMetricRows.map(({ key, label }) => (
+              <tr key={key}>
+                <th scope="row">{label}</th>
+                <td>{String(result.baseline_metrics[key])}</td>
+                <td>{String(result.intervention_metrics[key])}</td>
+                <td>{result.metric_deltas[key] ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="evaluation-checks" aria-labelledby="evaluation-checks-title">
+        <h3 id="evaluation-checks-title">版本化评估证据</h3>
+        <ul>
+          {result.evaluation_checks.map((check) => (
+            <li key={check.check_id}>
+              <div><code>{check.check_id}</code><span>{check.metric}</span></div>
+              <strong className={`check-${check.status.toLowerCase()}`}>{check.status}</strong>
+              <dl>
+                <div><dt>前值</dt><dd>{String(check.before_value)}</dd></div>
+                <div><dt>后值</dt><dd>{String(check.after_value)}</dd></div>
+                <div><dt>变化量</dt><dd>{check.delta}</dd></div>
+                <div><dt>阈值 / 容差</dt><dd>{check.threshold ?? check.tolerance ?? "—"}</dd></div>
+              </dl>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="replay-result-meta">
+        <span>尝试次数 {result.attempt_count}</span>
+        <span>模拟器 {result.simulator_version}</span>
+        <span>评估规则 {result.replay_evaluation_rule_version}</span>
+        <span title={result.result_hash}>ReplayResult SHA-256 {result.result_hash.slice(0, 16)}…</span>
+      </div>
+      <div className="replay-disclaimer">
+        <strong>{result.disclaimer}</strong>
+        <p>{result.no_device_write_notice}</p>
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [importState, setImportState] = useState<ImportState>({ kind: "idle" });
@@ -832,6 +920,7 @@ function App() {
     useState(false);
   const [confirmationState, setConfirmationState] =
     useState<PlanConfirmationState>({ kind: "idle" });
+  const [replayState, setReplayState] = useState<ReplayState>({ kind: "idle" });
 
   useEffect(() => {
     let active = true;
@@ -1078,6 +1167,36 @@ function App() {
         kind: "error",
         code: "PLAN_CONFIRMATION_FAILED",
         message: "本地人工确认服务暂时不可用。",
+      });
+    }
+  }
+
+  async function handleReplay() {
+    const plan = task.confirmed_plan;
+    if (
+      !plan ||
+      plan.status !== "VALID" ||
+      task.status !== "PLAN_CONFIRMED" ||
+      task.replay_result
+    ) return;
+    setReplayState({ kind: "loading" });
+    try {
+      const response = await runPairedReplay(
+        task.task_id,
+        plan.confirmed_plan_id,
+        plan.confirmed_plan_hash,
+      );
+      setState({ kind: "ready", task: response.task });
+      setReplayState({ kind: "idle" });
+    } catch (error: unknown) {
+      if (error instanceof TaskCreationError) {
+        setReplayState({ kind: "error", code: error.code, message: error.message });
+        return;
+      }
+      setReplayState({
+        kind: "error",
+        code: "PAIRED_REPLAY_FAILED",
+        message: "本地确定性配对模拟干预回放暂时不可用。",
       });
     }
   }
@@ -1442,11 +1561,74 @@ function App() {
                       confirmedPlan={task.confirmed_plan}
                       invalidCandidateIds={invalidCandidateIds}
                       confirmationContextInvalid={confirmationContextInvalid}
+                      replayCompleted={Boolean(task.replay_result)}
                     />
                   )}
                 </section>
               </>
             )}
+          </section>
+        )}
+
+        {task.confirmed_plan && (
+          <section className="replay-panel" aria-labelledby="replay-panel-title">
+            <div className="replay-panel-heading">
+              <div>
+                <p className="section-kicker">固定版本 · 服务端权威参数</p>
+                <h2 id="replay-panel-title">确定性配对模拟干预回放</h2>
+                <p>
+                  使用已冻结 ConfirmedPlan，在相同隐藏场景、固定 seed 与相同扰动下比较调整前后结果。
+                </p>
+              </div>
+              {!task.replay_result &&
+                task.status === "PLAN_CONFIRMED" &&
+                task.confirmed_plan.status === "VALID" && (
+                  <button
+                    className="primary-action replay-action"
+                    type="button"
+                    disabled={replayState.kind === "loading"}
+                    onClick={handleReplay}
+                  >
+                    运行离线模拟回放
+                  </button>
+                )}
+            </div>
+
+            {!task.replay_result && (
+              <>
+                <dl className="replay-confirmation-summary">
+                  <div><dt>ConfirmedPlan</dt><dd>{task.confirmed_plan.confirmed_plan_id}</dd></div>
+                  <div title={task.confirmed_plan.confirmed_plan_hash}>
+                    <dt>确认哈希</dt><dd>{task.confirmed_plan.confirmed_plan_hash.slice(0, 16)}…</dd>
+                  </div>
+                  <div><dt>模拟器</dt><dd>tw-simulator-v1（服务端固定）</dd></div>
+                  <div><dt>评估规则</dt><dd>{task.versions.evaluation_rule_version}</dd></div>
+                </dl>
+                {task.confirmed_plan.status === "STALE" && (
+                  <div className="inline-error" role="status">
+                    <div><strong>方案已过期，不能执行回放</strong><p>请重新生成并人工确认候选方案。</p></div>
+                    <code>CONFIRMED_PLAN_STALE</code>
+                  </div>
+                )}
+                <div className="replay-disclaimer">
+                  <strong>规则约束模拟环境中的离线回放结果，不代表真实产线良率改善。</strong>
+                  <p>本次回放仅比较固定模型、固定场景和固定扰动下的模拟结果，未向真实设备写入任何参数。</p>
+                </div>
+              </>
+            )}
+            {replayState.kind === "loading" && (
+              <div className="replay-progress" role="status" aria-live="polite">
+                <span className="inline-loader" />
+                <span>REPLAYING · 正在执行确定性配对模拟干预回放…</span>
+              </div>
+            )}
+            {replayState.kind === "error" && (
+              <div className="inline-error" role="alert">
+                <div><strong>离线模拟回放已拒绝</strong><p>{replayState.message}</p></div>
+                <code>{replayState.code}</code>
+              </div>
+            )}
+            {task.replay_result && <ReplayResultView result={task.replay_result} />}
           </section>
         )}
 

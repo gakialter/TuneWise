@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from .diagnosis import DiagnosticResultRecord
     from .parameter_planning import ParameterPlanningResultRecord
     from .plan_confirmation import ConfirmedPlan
+    from .replay import ReplayResult
 
 
 class TaskStatus(StrEnum):
@@ -137,6 +138,7 @@ class Task:
     diagnostic_result: DiagnosticResultRecord | None = None
     parameter_planning_result: ParameterPlanningResultRecord | None = None
     confirmed_plan: ConfirmedPlan | None = None
+    replay_result: ReplayResult | None = None
 
 
 STAGE_LABELS: tuple[tuple[TaskStatus, str], ...] = (

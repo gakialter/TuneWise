@@ -24,6 +24,7 @@ from .parameter_planning import (
     ParameterPlanningGuardError,
 )
 from .plan_confirmation import PlanConfirmationGuardError
+from .replay import ReplayBoundaryAudit, ReplayGuardError
 from .service import PlanningBoundaryAudit, TaskService
 from .importing import ImportValidationError
 from .store import TaskStore
@@ -62,6 +63,14 @@ class PlanConfirmationRequest(BaseModel):
     candidate_hash: str
 
 
+class ReplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task_id: str
+    confirmed_plan_id: str
+    confirmed_plan_hash: str
+    request_idempotency_key: str
+
+
 def create_app(
     public_asset_root: Path,
     expected_manifest_hash: str,
@@ -75,8 +84,11 @@ def create_app(
     expected_case_manifest_hash: str | None = None,
     planning_asset_root: Path | None = None,
     expected_planning_manifest_hash: str | None = None,
+    replay_asset_root: Path | None = None,
+    expected_replay_manifest_hash: str | None = None,
 ) -> FastAPI:
     boundary_audit = PlanningBoundaryAudit()
+    replay_boundary_audit = ReplayBoundaryAudit()
     service = TaskService(
         asset_loader=PublicAssetLoader(public_asset_root, expected_manifest_hash),
         store=TaskStore(database_path),
@@ -89,6 +101,9 @@ def create_app(
         planning_asset_root=planning_asset_root,
         expected_planning_manifest_hash=expected_planning_manifest_hash,
         planning_boundary_audit=boundary_audit,
+        replay_asset_root=replay_asset_root,
+        expected_replay_manifest_hash=expected_replay_manifest_hash,
+        replay_boundary_audit=replay_boundary_audit,
     )
     app = FastAPI(
         title="TuneWise MVP",
@@ -98,6 +113,8 @@ def create_app(
     )
     app.state.planning_boundary_audit = boundary_audit
     app.state.boundary_counters = boundary_audit.counters
+    app.state.replay_boundary_audit = replay_boundary_audit
+    app.state.replay_boundary_counters = replay_boundary_audit.counters
 
     @app.exception_handler(AssetIntegrityError)
     async def handle_asset_integrity_error(
@@ -234,6 +251,24 @@ def create_app(
             },
         )
 
+    @app.exception_handler(ReplayGuardError)
+    async def handle_replay_guard_error(
+        _request: Request,
+        error: ReplayGuardError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={
+                "error": {
+                    "code": error.code,
+                    "message": error.message,
+                    "expected_hash": error.expected_hash,
+                    "actual_hash": error.actual_hash,
+                    "failed_validation": error.failed_validation,
+                }
+            },
+        )
+
     @app.exception_handler(RequestValidationError)
     async def handle_request_validation_error(
         request: Request,
@@ -355,6 +390,29 @@ def create_app(
                     }
                 },
             )
+        if request.url.path.endswith("/replays"):
+            if any(item.get("type") == "extra_forbidden" for item in error.errors()):
+                return JSONResponse(
+                    status_code=422,
+                    content={
+                        "error": {
+                            "code": "REPLAY_REQUEST_FORBIDDEN_FIELDS",
+                            "message": (
+                                "回放请求只能提交 task_id、confirmed_plan_id、"
+                                "confirmed_plan_hash 与 request_idempotency_key。"
+                            ),
+                        }
+                    },
+                )
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error": {
+                        "code": "REPLAY_REQUEST_INVALID",
+                        "message": "回放请求缺少合法的确认方案身份或幂等键。",
+                    }
+                },
+            )
         return JSONResponse(
             status_code=422,
             content={"detail": jsonable_encoder(error.errors())},
@@ -438,6 +496,22 @@ def create_app(
         finally:
             boundary_audit.assert_pristine()
         return {"task": asdict(task), "confirmed_plan": asdict(plan)}
+
+    @app.post("/api/tasks/{task_id}/replays")
+    def run_paired_replay(task_id: str, request: ReplayRequest) -> dict:
+        if request.task_id != task_id:
+            raise ReplayGuardError(
+                "REPLAY_TASK_ID_MISMATCH",
+                "请求 task_id 与路径任务不一致。",
+                422,
+            )
+        task, result = service.run_replay(
+            task_id,
+            request.confirmed_plan_id,
+            request.confirmed_plan_hash,
+            request.request_idempotency_key,
+        )
+        return {"task": asdict(task), "replay_result": asdict(result)}
 
     @app.get("/api/tasks/{task_id}/audit-events")
     def get_audit_events(task_id: str) -> dict:

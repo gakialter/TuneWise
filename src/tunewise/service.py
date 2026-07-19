@@ -83,6 +83,16 @@ from .plan_confirmation import (
     canonical_hash,
     create_audit_event,
     create_confirmed_plan,
+    confirmed_plan_business_payload,
+)
+from .replay import (
+    ReplayBoundaryAudit,
+    ReplayComputation,
+    ReplayEvaluationRuleSnapshot,
+    ReplayGuardError,
+    ReplayOrchestrator,
+    ReplayResult,
+    create_replay_result,
 )
 from .store import (
     CaseRetrievalResultConflictError,
@@ -90,10 +100,12 @@ from .store import (
     DetectionResultConflictError,
     ImportSnapshotConflictError,
     StoredDetectionInput,
+    StoredReplayInput,
     TaskStore,
     ParameterPlanningResultConflictError,
     ConfirmedPlanConflictError,
     ConfirmationStateChangedError,
+    ReplayResultConflictError,
 )
 
 
@@ -141,6 +153,9 @@ class TaskService:
         planning_asset_root: Path | None = None,
         expected_planning_manifest_hash: str | None = None,
         planning_boundary_audit: PlanningBoundaryAudit | None = None,
+        replay_asset_root: Path | None = None,
+        expected_replay_manifest_hash: str | None = None,
+        replay_boundary_audit: ReplayBoundaryAudit | None = None,
     ) -> None:
         self._asset_loader = asset_loader
         self._store = store
@@ -156,6 +171,16 @@ class TaskService:
         self._expected_planning_manifest_hash = expected_planning_manifest_hash
         self._planning_boundary_audit = (
             planning_boundary_audit or PlanningBoundaryAudit()
+        )
+        self._replay_boundary_audit = replay_boundary_audit or ReplayBoundaryAudit()
+        self._replay_orchestrator = (
+            None
+            if replay_asset_root is None or expected_replay_manifest_hash is None
+            else ReplayOrchestrator(
+                replay_asset_root,
+                expected_replay_manifest_hash,
+                self._replay_boundary_audit,
+            )
         )
 
     def create_initial_task(self) -> Task:
@@ -1509,6 +1534,292 @@ class TaskService:
 
     def get_audit_events(self, task_id: str) -> tuple[AuditEvent, ...]:
         return self._store.get_audit_events(task_id)
+
+    def _validate_replay_plan(
+        self,
+        task: Task,
+        confirmed_plan_id: str,
+        confirmed_plan_hash: str,
+    ) -> ConfirmedPlan:
+        plan = self._store.get_current_confirmed_plan(task.task_id)
+        if plan is None or task.confirmed_plan is None:
+            raise ReplayGuardError("CONFIRMED_PLAN_NOT_FOUND", "当前任务缺少 ConfirmedPlan。")
+        if plan.confirmed_plan_id != confirmed_plan_id or plan.task_id != task.task_id:
+            raise ReplayGuardError("CONFIRMED_PLAN_NOT_FOUND", "ConfirmedPlan 不属于当前任务。")
+        recalculated_plan_hash = canonical_hash(confirmed_plan_business_payload(plan))
+        if (
+            confirmed_plan_hash != plan.confirmed_plan_hash
+            or recalculated_plan_hash != plan.confirmed_plan_hash
+        ):
+            raise ReplayGuardError(
+                "CONFIRMED_PLAN_HASH_MISMATCH",
+                "请求或服务端 ConfirmedPlan 内容哈希不匹配。",
+                expected_hash=plan.confirmed_plan_hash,
+                actual_hash=confirmed_plan_hash,
+            )
+        if plan.status != "VALID":
+            raise ReplayGuardError("CONFIRMED_PLAN_STALE", "STALE ConfirmedPlan 不得回放。")
+        planning = self._store.get_current_parameter_planning(task.task_id)
+        if planning is None:
+            raise ReplayGuardError("CONFIRMED_PLAN_NOT_FRESH", "当前参数规划结果已缺失。")
+        candidate = next(
+            (item for item in planning.ordered_candidates if item.candidate_id == plan.candidate_id),
+            None,
+        )
+        if candidate is None or candidate_content_hash(candidate) != plan.candidate_hash:
+            raise ReplayGuardError("CONFIRMED_PLAN_NOT_FRESH", "ConfirmedPlan 绑定的候选内容已变化。")
+        try:
+            binding, snapshot, planning_assets = self._confirmation_binding(task, planning, candidate)
+        except (
+            PlanConfirmationGuardError,
+            ParameterPlanningAssetError,
+            CaseRetrievalAssetError,
+            CaseRetrievalGuardError,
+            ConfirmationStateChangedError,
+        ) as error:
+            raise ReplayGuardError(
+                "CONFIRMED_PLAN_NOT_FRESH",
+                "ConfirmedPlan 的当前版本、快照或资产绑定已失效。",
+                failed_validation=getattr(error, "code", type(error).__name__),
+            ) from error
+        freshness = ConfirmedPlanFreshnessEvaluator().evaluate(plan, binding)
+        if not freshness.replay_eligible:
+            raise ReplayGuardError(
+                "CONFIRMED_PLAN_NOT_FRESH",
+                "ConfirmedPlan freshness check 未通过。",
+                failed_validation=",".join(freshness.stale_reason_codes),
+            )
+        safety = ParameterSafetyValidator(planning_assets.safety_policy).validate(
+            candidate,
+            snapshot=snapshot,
+            versions=SafetyVersionContext(
+                constraint_snapshot_version=binding.parameter_constraint_snapshot_version,
+                rule_set_version=binding.rule_set_version,
+                direction_rule_version=binding.direction_rule_version,
+                safety_rule_version=binding.safety_rule_version,
+                diagnostic_result_version=binding.diagnostic_result_version,
+                case_retrieval_result_version=binding.case_retrieval_result_version,
+            ),
+        )
+        if safety.validation_status != "PASSED":
+            raise ReplayGuardError(
+                "CONFIRMED_PLAN_SAFETY_INVALID",
+                "ConfirmedPlan 未通过回放前安全复核。",
+            )
+        return plan
+
+    def _load_replay_inputs(
+        self,
+        task: Task,
+    ) -> tuple[StoredReplayInput, ReplayEvaluationRuleSnapshot, str, int]:
+        source = self._store.get_replay_input(task.task_id)
+        if (
+            source.manifest is None
+            or source.batch is None
+            or source.replay_evaluation_rules is None
+            or task.data_import is None
+        ):
+            raise ReplayGuardError("REPLAY_INPUT_MISSING", "回放输入或评价快照缺失。")
+        if self._demo_asset_root is None or self._expected_dataset_manifest_hash is None:
+            raise ReplayGuardError("DATASET_ASSET_MISSING", "回放所需 DatasetManifest 未装配。")
+        manifest_path = self._demo_asset_root / "dataset-manifest.json"
+        rules_path = self._demo_asset_root / "import-rules.json"
+        try:
+            manifest_bytes = manifest_path.read_bytes()
+            trusted_manifest = json.loads(manifest_bytes)
+            rules_bytes = rules_path.read_bytes()
+            trusted_rules = json.loads(rules_bytes)
+        except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise ReplayGuardError(
+                "DATASET_ASSET_MISSING",
+                "回放所需受信任数据资产缺失或无效。",
+            ) from error
+        if hashlib.sha256(manifest_bytes).hexdigest() != self._expected_dataset_manifest_hash:
+            raise ReplayGuardError(
+                "DATASET_ASSET_HASH_MISMATCH",
+                "DatasetManifest 内容哈希不匹配。",
+            )
+        hashes = task.data_import.hashes
+        if (
+            trusted_manifest.get("rules_file_hash") != hashlib.sha256(rules_bytes).hexdigest()
+            or trusted_manifest.get("scenario_ref_hash") != hashes.scenario_ref_hash
+            or source.manifest.get("scenario_ref_hash") != hashes.scenario_ref_hash
+            or source.manifest.get("canonical_observation_hash") != hashes.canonical_observation_hash
+            or trusted_rules.get("replay_evaluation_rules") != source.replay_evaluation_rules
+        ):
+            raise ReplayGuardError(
+                "REPLAY_INPUT_HASH_MISMATCH",
+                "回放输入、场景或评价快照绑定不匹配。",
+            )
+        try:
+            evaluation_rules = ReplayEvaluationRuleSnapshot(**source.replay_evaluation_rules)
+        except (TypeError, ValueError) as error:
+            raise ReplayGuardError(
+                "REPLAY_EVALUATION_SNAPSHOT_INVALID",
+                "回放评价快照格式无效。",
+            ) from error
+        if evaluation_rules.evaluation_rule_version != task.versions.evaluation_rule_version:
+            raise ReplayGuardError(
+                "REPLAY_EVALUATION_SNAPSHOT_INVALID",
+                "回放评价规则版本不匹配。",
+            )
+        scenario_ref = trusted_manifest.get("scenario_ref")
+        seed = trusted_manifest.get("random_seed")
+        if not isinstance(scenario_ref, str):
+            raise ReplayGuardError("SCENARIO_REFERENCE_INVALID", "场景引用无法解析。")
+        if not isinstance(seed, int) or isinstance(seed, bool):
+            raise ReplayGuardError(
+                "SIMULATOR_INPUT_MISMATCH",
+                "导入数据固定 seed 绑定无效。",
+            )
+        return source, evaluation_rules, scenario_ref, seed
+
+    def _persist_replay_success(
+        self,
+        *,
+        task: Task,
+        plan: ConfirmedPlan,
+        source: StoredReplayInput,
+        computation: ReplayComputation,
+        evaluation_rules: ReplayEvaluationRuleSnapshot,
+        request_idempotency_key: str,
+    ) -> tuple[Task, ReplayResult]:
+        if task.data_import is None or source.replay_evaluation_rules is None:
+            raise ReplayGuardError("REPLAY_INPUT_MISSING", "回放输入或评价快照缺失。")
+        replay_input_hashes = {
+            **computation.input_asset_hashes,
+            "dataset_manifest": self._expected_dataset_manifest_hash or "",
+            "dataset_raw": task.data_import.hashes.raw_file_hash,
+            "replay_evaluation_rule_snapshot": canonical_hash(
+                source.replay_evaluation_rules
+            ),
+            **{
+                f"confirmed_plan_source:{name}": value
+                for name, value in plan.source_asset_hashes.items()
+            },
+        }
+        computation = replace(computation, input_asset_hashes=replay_input_hashes)
+        now = self._clock.now()
+        result = create_replay_result(
+            task_id=task.task_id,
+            confirmed_plan_id=plan.confirmed_plan_id,
+            confirmed_plan_hash=plan.confirmed_plan_hash,
+            candidate_id=plan.candidate_id,
+            candidate_hash=plan.candidate_hash,
+            request_idempotency_key=request_idempotency_key,
+            attempt_count=1,
+            dataset_version=task.versions.dataset_version,
+            schema_version=task.versions.schema_version,
+            generator_version=task.versions.generator_version,
+            rule_set_version=task.versions.rule_set_version,
+            model_version=task.versions.model_version,
+            computation=computation,
+            evaluation_rule_version=evaluation_rules.evaluation_rule_version,
+            created_at=now,
+            completed_at=now,
+        )
+        replaying_task = replace(
+            task,
+            status=TaskStatus.REPLAYING,
+            stages=workflow_for(TaskStatus.REPLAYING),
+        )
+        completed_task = replace(
+            replaying_task,
+            status=TaskStatus.REPLAYED,
+            stages=workflow_for(TaskStatus.REPLAYED),
+            replay_result=result,
+        )
+        base_event = create_audit_event(
+            task_id=task.task_id,
+            actor_id=task.actor.actor_id,
+            actor_role=task.actor.actor_role,
+            display_name=task.actor.display_name,
+            occurred_at=now,
+            result="SUCCESS",
+            rule_set_version=task.versions.rule_set_version,
+            candidate_id=plan.candidate_id,
+            candidate_hash=plan.candidate_hash,
+            plan=plan,
+        )
+        event = replace(
+            base_event,
+            action="RUN_PAIRED_REPLAY",
+            replay_result_id=result.replay_result_id,
+            replay_result_hash=result.result_hash,
+            simulator_version=result.simulator_version,
+            evaluation_rule_version=result.replay_evaluation_rule_version,
+            baseline_reproduction_status=result.baseline_reproduction_status,
+            replay_status=result.replay_status,
+            attempt_count=result.attempt_count,
+        )
+        try:
+            return self._store.save_replay_success(
+                replaying_task,
+                completed_task,
+                result,
+                event,
+                computation.hidden_binding_hash,
+            )
+        except ReplayResultConflictError as error:
+            raise ReplayGuardError(
+                "REPLAY_RESULT_CONFLICT",
+                "当前任务回放结果已发生冲突。",
+            ) from error
+
+    def run_replay(
+        self,
+        task_id: str,
+        confirmed_plan_id: str,
+        confirmed_plan_hash: str,
+        request_idempotency_key: str,
+    ) -> tuple[Task, ReplayResult]:
+        try:
+            task = self.get_task(task_id)
+        except PlanConfirmationGuardError as error:
+            if self._store.get_current_confirmed_plan(task_id) is None:
+                raise ReplayGuardError(
+                    "CONFIRMED_PLAN_NOT_FOUND",
+                    "当前任务缺少 ConfirmedPlan。",
+                ) from error
+            raise ReplayGuardError(error.code, error.message) from error
+        if task is None:
+            raise ReplayGuardError("TASK_NOT_FOUND", "调机任务不存在。", 404)
+        if self._store.get_current_replay_result(task_id) is not None:
+            raise ReplayGuardError("REPLAY_RESULT_CONFLICT", "当前任务已存在有效 ReplayResult。")
+        if task.status is not TaskStatus.PLAN_CONFIRMED:
+            raise ReplayGuardError(
+                "TASK_NOT_PLAN_CONFIRMED",
+                "只有 PLAN_CONFIRMED 任务可以运行离线模拟回放。",
+            )
+        plan = self._validate_replay_plan(
+            task,
+            confirmed_plan_id,
+            confirmed_plan_hash,
+        )
+        if self._replay_orchestrator is None:
+            raise ReplayGuardError("SIMULATOR_ASSET_MISSING", "本地模拟器资产未装配。")
+        source, evaluation_rules, scenario_ref, seed = self._load_replay_inputs(task)
+        computation = self._replay_orchestrator.execute_pair(
+            scenario_ref=scenario_ref,
+            scenario_ref_hash=task.data_import.hashes.scenario_ref_hash,
+            sample_count=task.data_import.sample_count,
+            seed=seed,
+            current_values=plan.current_values,
+            proposed_values=plan.proposed_values,
+            imported_baseline_canonical_hash=task.data_import.hashes.canonical_observation_hash,
+            evaluation_rules=evaluation_rules,
+            control_limits=ControlLimitRegistry.snapshot_for(
+                task.versions.rule_set_version
+            ),
+        )
+        return self._persist_replay_success(
+            task=task,
+            plan=plan,
+            source=source,
+            computation=computation,
+            evaluation_rules=evaluation_rules,
+            request_idempotency_key=request_idempotency_key,
+        )
 
     def has_task(self, task_id: str) -> bool:
         return self._store.has_task(task_id)

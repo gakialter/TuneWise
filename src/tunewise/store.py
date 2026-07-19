@@ -45,6 +45,7 @@ from .plan_confirmation import (
     PlanConfirmationGuardError,
     deserialize_confirmed_plan,
 )
+from .replay import ReplayResult, deserialize_replay_result
 
 
 class ImportSnapshotConflictError(RuntimeError):
@@ -72,6 +73,10 @@ class ConfirmedPlanConflictError(RuntimeError):
 
 
 class ConfirmationStateChangedError(ConfirmedPlanConflictError):
+    pass
+
+
+class ReplayResultConflictError(RuntimeError):
     pass
 
 
@@ -114,6 +119,16 @@ class StoredPlanningInput:
     measurements: tuple[dict, ...]
     control_limits: dict | None
     parameter_constraints: dict | None
+
+
+@dataclass(frozen=True, slots=True)
+class StoredReplayInput:
+    manifest: dict | None
+    batch: dict | None
+    measurements: tuple[dict, ...]
+    control_limits: dict | None
+    parameter_constraints: dict | None
+    replay_evaluation_rules: dict | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -308,6 +323,19 @@ class TaskStore:
                 "event_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, "
                 "action TEXT NOT NULL, result TEXT NOT NULL, occurred_at TEXT NOT NULL, "
                 "payload_json TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS replay_results ("
+                "replay_result_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, "
+                "confirmed_plan_id TEXT NOT NULL UNIQUE, confirmed_plan_hash TEXT NOT NULL, "
+                "request_idempotency_key_hash TEXT NOT NULL, result_hash TEXT NOT NULL, "
+                "replay_status TEXT NOT NULL, attempt_count INTEGER NOT NULL, "
+                "hidden_binding_hash TEXT NOT NULL, created_at TEXT NOT NULL, "
+                "completed_at TEXT NOT NULL, payload_json TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS current_replay_results ("
+                "task_id TEXT PRIMARY KEY, replay_result_id TEXT NOT NULL UNIQUE)"
             )
 
     def get(self, task_id: str) -> Task | None:
@@ -561,6 +589,34 @@ class TaskStore:
             measurements=measurements,
             control_limits=payloads["control_limits"],
             parameter_constraints=payloads["parameter_constraints"],
+        )
+
+    def get_replay_input(self, task_id: str) -> StoredReplayInput:
+        with self._connect() as connection:
+            payloads: dict[str, dict | None] = {}
+            for key, table in (
+                ("manifest", "dataset_manifests"),
+                ("batch", "batches"),
+                ("control_limits", "control_limit_snapshots"),
+                ("parameter_constraints", "parameter_constraint_snapshots"),
+                ("replay_evaluation_rules", "replay_evaluation_rule_snapshots"),
+            ):
+                row = connection.execute(
+                    f"SELECT payload_json FROM {table} WHERE task_id = ?",
+                    (task_id,),
+                ).fetchone()
+                payloads[key] = None if row is None else json.loads(row["payload_json"])
+            rows = connection.execute(
+                "SELECT payload_json FROM measurements WHERE task_id = ? ORDER BY sample_index",
+                (task_id,),
+            ).fetchall()
+        return StoredReplayInput(
+            manifest=payloads["manifest"],
+            batch=payloads["batch"],
+            measurements=tuple(json.loads(row["payload_json"]) for row in rows),
+            control_limits=payloads["control_limits"],
+            parameter_constraints=payloads["parameter_constraints"],
+            replay_evaluation_rules=payloads["replay_evaluation_rules"],
         )
 
     def save_detection(
@@ -1058,6 +1114,16 @@ class TaskStore:
             )
         return plan
 
+    def get_current_replay_result(self, task_id: str) -> ReplayResult | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT result.payload_json FROM current_replay_results current "
+                "JOIN replay_results result ON result.replay_result_id = current.replay_result_id "
+                "WHERE current.task_id = ?",
+                (task_id,),
+            ).fetchone()
+        return None if row is None else deserialize_replay_result(json.loads(row["payload_json"]))
+
     def confirmation_state_token(self, task_id: str) -> str:
         with self._connect() as connection:
             try:
@@ -1281,6 +1347,90 @@ class TaskStore:
                 ),
             )
 
+    def save_replay_success(
+        self,
+        replaying_task: Task,
+        completed_task: Task,
+        result: ReplayResult,
+        event: AuditEvent,
+        hidden_binding_hash: str,
+    ) -> tuple[Task, ReplayResult]:
+        replaying_payload = json.dumps(asdict(replaying_task), ensure_ascii=False, separators=(",", ":"))
+        completed_payload = json.dumps(asdict(completed_task), ensure_ascii=False, separators=(",", ":"))
+        result_payload = json.dumps(asdict(result), ensure_ascii=False, separators=(",", ":"))
+        event_payload = json.dumps(asdict(event), ensure_ascii=False, separators=(",", ":"))
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            task_row = connection.execute(
+                "SELECT payload_json FROM tasks WHERE task_id = ?",
+                (result.task_id,),
+            ).fetchone()
+            if task_row is None:
+                raise ReplayResultConflictError("调机任务不存在。")
+            current_task = self._deserialize(task_row["payload_json"])
+            if current_task.status is not TaskStatus.PLAN_CONFIRMED:
+                raise ReplayResultConflictError("当前任务状态不允许保存回放结果。")
+            plan_row = connection.execute(
+                "SELECT plan.confirmed_plan_id, plan.confirmed_plan_hash, plan.status "
+                "FROM current_confirmed_plans current JOIN confirmed_plans plan "
+                "ON plan.confirmed_plan_id = current.confirmed_plan_id WHERE current.task_id = ?",
+                (result.task_id,),
+            ).fetchone()
+            if (
+                plan_row is None
+                or plan_row["confirmed_plan_id"] != result.confirmed_plan_id
+                or plan_row["confirmed_plan_hash"] != result.confirmed_plan_hash
+                or plan_row["status"] != "VALID"
+            ):
+                raise ReplayResultConflictError("当前 ConfirmedPlan 绑定不允许保存回放结果。")
+            existing = connection.execute(
+                "SELECT 1 FROM current_replay_results WHERE task_id = ?",
+                (result.task_id,),
+            ).fetchone()
+            if existing is not None:
+                raise ReplayResultConflictError("当前任务已存在有效 ReplayResult。")
+            connection.execute(
+                "UPDATE tasks SET payload_json = ? WHERE task_id = ?",
+                (replaying_payload, result.task_id),
+            )
+            connection.execute(
+                "INSERT INTO replay_results (replay_result_id, task_id, confirmed_plan_id, "
+                "confirmed_plan_hash, request_idempotency_key_hash, result_hash, replay_status, "
+                "attempt_count, hidden_binding_hash, created_at, completed_at, payload_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    result.replay_result_id,
+                    result.task_id,
+                    result.confirmed_plan_id,
+                    result.confirmed_plan_hash,
+                    result.request_idempotency_key_hash,
+                    result.result_hash,
+                    result.replay_status,
+                    result.attempt_count,
+                    hidden_binding_hash,
+                    result.created_at,
+                    result.completed_at,
+                    result_payload,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO current_replay_results (task_id, replay_result_id) VALUES (?, ?)",
+                (result.task_id, result.replay_result_id),
+            )
+            connection.execute(
+                "INSERT INTO audit_events (event_id, task_id, action, result, occurred_at, payload_json) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (event.event_id, event.task_id, event.action, event.result, event.occurred_at, event_payload),
+            )
+            connection.execute(
+                "UPDATE tasks SET payload_json = ? WHERE task_id = ?",
+                (completed_payload, result.task_id),
+            )
+        stored = self.get(result.task_id)
+        if stored is None:
+            raise RuntimeError("回放结果保存失败。")
+        return stored, result
+
     def mark_confirmed_plan_stale(
         self,
         task: Task,
@@ -1362,6 +1512,7 @@ class TaskStore:
         diagnostic_payload = payload.get("diagnostic_result")
         planning_payload = payload.get("parameter_planning_result")
         confirmed_plan_payload = payload.get("confirmed_plan")
+        replay_result_payload = payload.get("replay_result")
         return Task(
             task_id=payload["task_id"],
             status=TaskStatus(payload["status"]),
@@ -1395,5 +1546,10 @@ class TaskStore:
                 None
                 if confirmed_plan_payload is None
                 else deserialize_confirmed_plan(confirmed_plan_payload)
+            ),
+            replay_result=(
+                None
+                if replay_result_payload is None
+                else deserialize_replay_result(replay_result_payload)
             ),
         )

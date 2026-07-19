@@ -37,19 +37,21 @@ def test_single_process_serves_built_frontend_and_backend_api(tmp_path):
     assert task.json()["status"] == "CREATED"
 
 
-def test_runtime_source_has_no_network_simulator_or_isolated_asset_dependency():
+def test_runtime_source_has_no_external_dependency_and_simulator_is_replay_only():
     runtime_root = Path(__file__).parents[2] / "src" / "tunewise"
     runtime_files = tuple(runtime_root.rglob("*.py"))
     imported_roots: set[str] = set()
-    semantic_source = []
+    relative_imports: dict[str, set[str]] = {}
     for path in runtime_files:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        semantic_source.append(ast.dump(tree).lower())
+        relative_imports[path.name] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 imported_roots.update(alias.name.partition(".")[0] for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 imported_roots.add(node.module.partition(".")[0])
+            elif isinstance(node, ast.ImportFrom) and node.level > 0 and node.module:
+                relative_imports[path.name].add(node.module.partition(".")[0])
 
     assert imported_roots <= {
         "__future__",
@@ -71,18 +73,29 @@ def test_runtime_source_has_no_network_simulator_or_isolated_asset_dependency():
             "typing",
             "uuid",
         }
-    assert not {
-        token
-        for token in (
-            "simulatorgateway",
-            "faulttruth",
-            "fault_truth",
-            "hidden_scenario",
-            "training_labels",
-            "evaluation_labels",
-        )
-        if token in "\n".join(semantic_source)
-    }
+    assert {
+        name for name, imports in relative_imports.items() if "simulator_gateway" in imports
+    } == {"replay.py"}
+    assert {
+        name for name, imports in relative_imports.items() if "simulator_core" in imports
+    } == {"simulator_gateway.py"}
+    for path in runtime_files:
+        if path.name in {"simulator_core.py", "simulator_gateway.py"}:
+            continue
+        semantic_source = ast.dump(
+            ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        ).lower()
+        assert not {
+            token
+            for token in (
+                "faulttruth",
+                "fault_truth",
+                "primary_fault_truth",
+                "training_labels",
+                "evaluation_labels",
+            )
+            if token in semantic_source
+        }
 
 
 def test_initial_task_reads_only_public_version_assets(tmp_path, monkeypatch):

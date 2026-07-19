@@ -609,6 +609,124 @@ function confirmedPlanResponse(status: "VALID" | "STALE" = "VALID") {
   return { task, confirmed_plan: confirmedPlan };
 }
 
+function replayResponse() {
+  const confirmed = confirmedPlanResponse();
+  const baselineMetrics = {
+    sample_count: 24,
+    mtf_center_mean: "0.831003",
+    mtf_center_std: "0.001750",
+    mtf_lt_mean: "0.714968",
+    mtf_rt_mean: "0.752520",
+    mtf_lb_mean: "0.633978",
+    mtf_rb_mean: "0.567683",
+    corner_mtf_mean: "0.667287",
+    corner_mtf_min: "0.567683",
+    corner_mtf_range: "0.184837",
+    corner_mtf_std: "0.071709",
+    center_corner_gap: "0.163716",
+    control_limit_pass: false,
+    target_anomaly_triggered: true,
+    parameter_summary: confirmed.confirmed_plan.current_values,
+    metric_definition_version: "tw-replay-metrics-v1",
+    standard_deviation_method: "POPULATION",
+  };
+  const interventionMetrics = {
+    ...baselineMetrics,
+    mtf_center_mean: "0.832128",
+    mtf_lt_mean: "0.723468",
+    mtf_rt_mean: "0.753770",
+    mtf_lb_mean: "0.635228",
+    mtf_rb_mean: "0.635683",
+    corner_mtf_mean: "0.687037",
+    corner_mtf_min: "0.635228",
+    corner_mtf_range: "0.118542",
+    corner_mtf_std: "0.052553",
+    center_corner_gap: "0.145091",
+    control_limit_pass: true,
+    target_anomaly_triggered: false,
+    parameter_summary: confirmed.confirmed_plan.proposed_values,
+  };
+  const checks = [
+    ["CENTER_REGRESSION_GUARD", "mtf_center_mean", "0.001125", "0.010000"],
+    ["WORST_CORNER_IMPROVEMENT", "corner_mtf_min", "0.067545", "0.020000"],
+    ["CORNER_RANGE_REDUCTION", "corner_mtf_range", "-0.066295", "0.020000"],
+    ["CONTROL_LIMIT_PASS", "control_limit_pass", "False->True", "true"],
+  ].map(([checkId, metric, delta, threshold]) => ({
+    check_id: checkId,
+    metric,
+    before_value: metric === "control_limit_pass" ? false : "0.000000",
+    after_value: metric === "control_limit_pass" ? true : "0.000000",
+    delta,
+    threshold,
+    tolerance: null,
+    status: "PASSED",
+    rule_version: "tw-evaluation-v1",
+    explanation_template_key: `replay.check.${checkId.toLowerCase()}`,
+  }));
+  const result = {
+    replay_result_id: "tw-replay-result-fixed",
+    replay_result_version: "tw-replay-result-v1",
+    task_id: confirmed.task.task_id,
+    confirmed_plan_id: confirmed.confirmed_plan.confirmed_plan_id,
+    confirmed_plan_hash: confirmed.confirmed_plan.confirmed_plan_hash,
+    candidate_id: confirmed.confirmed_plan.candidate_id,
+    candidate_hash: confirmed.confirmed_plan.candidate_hash,
+    request_idempotency_key_hash: "6".repeat(64),
+    replay_status: "SUCCESS",
+    attempt_count: 1,
+    dataset_version: "tw-dataset-v1",
+    schema_version: "tw-schema-v1",
+    generator_version: "tw-generator-v1",
+    rule_set_version: "tw-rules-v1",
+    model_version: "tw-model-v1",
+    simulator_version: "tw-simulator-v1",
+    replay_scenario_schema_version: "tw-replay-scenario-v1",
+    scenario_mapping_version: "tw-scenario-mapping-v1",
+    scenario_ref_hash: "5".repeat(64),
+    disturbance_sequence_hash: "7".repeat(64),
+    replay_seed_hash: "8".repeat(64),
+    baseline_input_hash: "9".repeat(64),
+    intervention_input_hash: "a".repeat(64),
+    canonicalizer_version: "tw-canonicalizer-v1",
+    replay_result_canonicalizer_version: "tw-replay-result-canonicalizer-v1",
+    imported_baseline_canonical_hash: "c74206387e06287d6c11ee8a4c6cc46cae867e6967f0c790f5dfe2f5ef940668",
+    simulated_baseline_canonical_hash: "c74206387e06287d6c11ee8a4c6cc46cae867e6967f0c790f5dfe2f5ef940668",
+    baseline_reproduction_status: "PASSED",
+    baseline_metrics: baselineMetrics,
+    intervention_metrics: interventionMetrics,
+    metric_deltas: {
+      mtf_center_mean: "0.001125",
+      corner_mtf_min: "0.067545",
+      corner_mtf_range: "-0.066295",
+      corner_mtf_std: "-0.019156",
+    },
+    evaluation_checks: checks,
+    replay_evaluation_rule_version: "tw-evaluation-v1",
+    input_asset_hashes: {},
+    pairing_invariants: { only_changed_inputs: "pitch" },
+    before_observation_hash: "c".repeat(64),
+    after_observation_hash: "d".repeat(64),
+    baseline_output_hash: "c".repeat(64),
+    intervention_output_hash: "d".repeat(64),
+    result_hash: "e".repeat(64),
+    created_at: "2026-07-19T08:05:00.000000Z",
+    completed_at: "2026-07-19T08:05:00.000000Z",
+    disclaimer_version: "tw-replay-disclaimer-v1",
+    disclaimer: "规则约束模拟环境中的离线回放结果，不代表真实产线良率改善。",
+    no_device_write_notice: "本次回放仅比较固定模型、固定场景和固定扰动下的模拟结果，未向真实设备写入任何参数。",
+  };
+  const task = {
+    ...confirmed.task,
+    status: "REPLAYED",
+    stages: stages.map((stage, index) => ({
+      ...stage,
+      availability: index < 7 ? "completed" : index === 7 ? "current" : "locked",
+    })),
+    replay_result: result,
+  };
+  return { task, replay_result: result };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -1538,4 +1656,74 @@ test("renders persisted stale confirmed plan as permanently unavailable", async 
   expect(screen.getByText("INPUT_DATA_CHANGED")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "人工确认候选方案" })).toBeNull();
   expect(screen.queryByRole("button", { name: /回放|执行|写入设备/ })).toBeNull();
+});
+
+test("runs replay with only confirmed identity and renders accessible loading", async () => {
+  let resolveReplay: (response: Response) => void = () => undefined;
+  const pending = new Promise<Response>((resolve) => {
+    resolveReplay = resolve;
+  });
+  const confirmed = confirmedPlanResponse();
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(confirmed.task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockReturnValueOnce(pending);
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  const button = await screen.findByRole("button", { name: "运行离线模拟回放" });
+  fireEvent.click(button);
+
+  expect(await screen.findByText("REPLAYING · 正在执行确定性配对模拟干预回放…")).toBeTruthy();
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  const body = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+  expect(body).toEqual({
+    task_id: "tw-demo-task-001",
+    confirmed_plan_id: "tw-confirmed-plan-fixed",
+    confirmed_plan_hash: "c".repeat(64),
+    request_idempotency_key: "tw-replay-tw-confirmed-plan-fixed",
+  });
+  expect(body.proposed_values).toBeUndefined();
+  expect(body.seed).toBeUndefined();
+  expect(body.scenario_ref).toBeUndefined();
+
+  resolveReplay(
+    new Response(JSON.stringify(replayResponse()), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  expect(await screen.findByText("SUCCESS")).toBeTruthy();
+});
+
+test("renders baseline reproduction before after checks hash and persistent disclaimers", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify(replayResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
+
+  render(<App />);
+
+  expect(await screen.findByText("基线重现通过")).toBeTruthy();
+  expect(screen.getByText("调整前")).toBeTruthy();
+  expect(screen.getByText("调整后")).toBeTruthy();
+  expect(screen.getByText("WORST_CORNER_IMPROVEMENT")).toBeTruthy();
+  expect(screen.getByText("尝试次数 1")).toBeTruthy();
+  expect(screen.getByText(/ReplayResult SHA-256/)).toBeTruthy();
+  expect(screen.getByText("规则约束模拟环境中的离线回放结果，不代表真实产线良率改善。")).toBeTruthy();
+  expect(screen.getByText(/未向真实设备写入任何参数/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /写入设备|自动应用/ })).toBeNull();
+  expect(document.body.textContent).not.toContain("真实良率提升");
+  expect(document.body.textContent).not.toContain("最优参数");
+  expect(document.body.textContent).not.toContain("尚未进行模拟回放");
 });
