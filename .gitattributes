@@ -1,5 +1,6 @@
 assets/**/*.csv text eol=lf
 assets/**/*.json text eol=lf
+tests/fixtures/shadow-data/**/*.csv text eol=lf
 src/tunewise/static/**/*.css text eol=lf
 src/tunewise/static/**/*.js text eol=lf
 src/tunewise/static/**/*.json text eol=lf
