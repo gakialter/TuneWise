@@ -4,7 +4,6 @@ import argparse
 import hashlib
 import json
 import math
-import platform
 import sys
 from pathlib import Path
 
@@ -340,8 +339,10 @@ def generate(output: Path, seed: int = 20260718) -> dict:
         "source_assets": source_assets,
         "dependency_summary": {
             "implementation": "python-standard-library",
-            "python": platform.python_version(),
-            "python_implementation": platform.python_implementation(),
+            # Frozen generation provenance is part of the immutable asset contract;
+            # using the current runtime here makes byte-for-byte regeneration drift.
+            "python": "3.11.9",
+            "python_implementation": "CPython",
             "serialization": "canonical-json-v1",
         },
         "model_fingerprint": model_fingerprint,

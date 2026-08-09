@@ -1,0 +1,50 @@
+{
+  "evidence_version": "tw-browser-qa-evidence-v1",
+  "target_origin": "http://127.0.0.1:8000",
+  "execution_surface": "LOCAL_OPCUA_SANDBOX",
+  "replay_status": "SUCCESS",
+  "execution_status": "SUCCEEDED",
+  "actual_after_value": "0.200000",
+  "receipt_hash": "42d056b794e05c96da2d78a5b899b87afc23457c55e9a68d9b78d104f0c56b90",
+  "mobile_viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "mobile_fit": {
+    "device_panel_top": {
+      "innerWidth": 390,
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "canScrollX": false,
+      "offenders": []
+    },
+    "receipt": {
+      "innerWidth": 390,
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "canScrollX": false,
+      "offenders": []
+    }
+  },
+  "desktop_viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "desktop_fit": {
+    "innerWidth": 1440,
+    "clientWidth": 1440,
+    "scrollWidth": 1440,
+    "canScrollX": false,
+    "offenders": []
+  },
+  "observed_http_request_count": 17,
+  "external_http_request_count": 0,
+  "console_error_count": 0,
+  "page_error_count": 0,
+  "failed_request_count": 0,
+  "screenshots": [
+    "opcua-sandbox-mobile-390.png",
+    "opcua-sandbox-mobile-390-receipt.png",
+    "opcua-sandbox-desktop-1440.png"
+  ]
+}

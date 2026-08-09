@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "qa:browser": "node e2e/browser-qa.mjs"
   },
   "dependencies": {
     "react": "19.2.5",
@@ -17,6 +18,7 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
     "jsdom": "29.1.1",
+    "playwright": "1.61.1",
     "typescript": "7.0.2",
     "vite": "8.1.4",
     "vitest": "4.1.10"

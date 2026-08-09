@@ -1,2 +1,9 @@
 assets/**/*.csv text eol=lf
 assets/**/*.json text eol=lf
+src/tunewise/static/**/*.css text eol=lf
+src/tunewise/static/**/*.js text eol=lf
+src/tunewise/static/**/*.json text eol=lf
+src/tunewise/static/**/*.html text eol=lf
+src/tunewise/static/**/*.svg text eol=lf
+frontend/**/*.html text eol=lf
+frontend/public/**/*.svg text eol=lf

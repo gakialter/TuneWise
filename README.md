@@ -6,13 +6,15 @@
 TuneWise 聚焦精密光学主动对准（AA）单一工站，通过离线数据导入、异常检测、根因排序、已审核案例检索、安全参数候选、人工确认和确定性模拟回放，为现场工程人员提供可追溯的调机决策支持。
 
 - **参赛命题**：2026 AI 先锋未来人才大赛｜舜宇光学科技「智造调机助手」
-- **当前状态**：`tw-08-complete`，已完成 TW-01～TW-08，可稳定演示至结构化回放评估
+- **当前状态**：`tw-08-complete` 基线上进入复赛优先工程阶段；默认闭环仍止于结构化回放评估，显式 demo 模式可验证本地 OPC-UA 模拟设备受控下发
 - **快速入口**：[Quick Start](#快速启动) · [5 分钟演示](docs/submission/demo-script-5min.md) · [评委快速体验](docs/submission/judge-guide.md)
 - **核心边界**：本项目是单工站、本地离线、人在回路的比赛原型，不是 AI 自动调机系统
 
 ![TuneWise 任务总览](docs/images/01-overview.png)
 
 > **规则约束模拟环境中的离线回放结果，不代表真实产线良率改善。**
+>
+> **当前 OPC-UA 通道连接的是本地模拟设备，不代表已经完成真实设备接入或真实设备安全验证。**
 
 ## 为什么做这个项目
 
@@ -25,7 +27,7 @@ TuneWise 因此把问题限定为“决策支持”：用结构化证据帮助�
 - 只覆盖一个 AA 工站和一个代表性异常：中心 MTF 合格或临界合格、四角 MTF 不对称下降。
 - 本地离线原型，运行期不依赖云服务、在线模型、API Key 或外部网络。
 - 人在回路；系统给出候选，AA 工艺工程师确认后才允许模拟回放。
-- 决策支持而非自动控制；未连接 MES、QMS 或真实设备，未向设备写入参数。
+- 决策支持而非无人值守控制；未连接 MES、QMS 或真实设备。设备执行能力默认关闭，只能在显式 `OPCUA_SANDBOX` 模式下向本机模拟设备写入人工确认且回放成功的单参数方案。
 - 数据来自公开知识与规则约束模拟，不使用舜宇真实产线数据，也不代表舜宇内部系统。
 - 回放只验证固定版本模拟环境内的可复现变化，不证明真实因果关系、真实良率改善或参数最优性。
 
@@ -40,6 +42,7 @@ flowchart LR
     E --> F["人工确认"]
     F --> G["确定性配对模拟回放"]
     G --> H["结构化评估"]
+    H -. "独立人工确认 + 全部门禁" .-> I["本地 OPC-UA 模拟设备写入与回读"]
 ```
 
 完整操作界面依次展示数据完整性、异常证据、诊断依据、案例距离、方向证据、安全检查、确认哈希、基线重现与回放结果，避免把闭环拆成无法追溯的孤立结果。
@@ -59,6 +62,8 @@ flowchart LR
 11. **Canonical baseline reproduction**：回放前先用同一 `ObservableCanonicalizer` 重现导入基线，规范化哈希一致才进入干预运行。
 12. **确定性配对模拟回放**：基线与干预使用同一隐藏场景、样本数、扰动、seed 和因果版本，唯一变化是 `ConfirmedPlan` 参数。
 13. **结构化评估与审计链**：结果按冻结优先级判定为 `REGRESSION`、`SUCCESS`、`PARTIAL_IMPROVEMENT` 或 `NO_IMPROVEMENT`，保存版本、检查项与结果哈希。
+14. **人工确认后的 OPC-UA 受控参数下发验证**：只接受服务端保存的 `ConfirmedPlan` 与 `ReplayResult=SUCCESS`，写前重跑 freshness/safety 并验证实际 server identity、mapping、datatype、unit、只读 access 与 Method capability。在 TuneWise 本地 OPC-UA sandbox 中，五个调机参数 Variable 对所有普通 OPC-UA 客户端永久只读；参数变化只能通过受控 `ApplyConfirmedParameterChange` Method，并在 sandbox 单一执行锁内完成 expected-before 比较、写入、回读和幂等记录。结果不确定时只读 reconciliation，绝不回退到普通 variable write。这是本地模拟设备提供的受控语义，不是 OPC-UA 协议天然提供 CAS，也不代表已验证真实 PLC 原子写或真实设备安全联锁。
+15. **真实设备 shadow 数据契约与分析**：版本化 `ShadowEvidenceBundle` 绑定 raw/mapping/canonical measurement hash、context、reviewed outcome、provenance、unit mapping 与 review contract；独立 analysis contract 再绑定控制限、SPC、固定模型和安全资产。数据固定进入 `SHADOW_READ_ONLY`，不进入训练集、APPROVED 案例库或固定演示资产；无合法 review contract 时固定为 `NOT_EVALUABLE`，当前声明式审核只能标记 `EVALUATED_DECLARED_REVIEW`，不表示外部或专家验证。
 
 ## 系统架构
 
@@ -94,6 +99,13 @@ flowchart TB
         HIDDEN["Opaque scenario_ref + fixed disturbance"]
     end
 
+    subgraph DEVICE["Explicit Local Device Execution Boundary"]
+        EXEC["DeviceExecutionService"]
+        OPCUA["SandboxOpcUaGateway"]
+        LOCAL["Local OPC-UA Sandbox"]
+        RECEIPT["Immutable Execution Receipt"]
+    end
+
     CSV --> IMPORT
     ASSETS --> IMPORT
     ASSETS --> SPC
@@ -109,15 +121,19 @@ flowchart TB
     EVAL --> DB
     REPLAY -->|"only allowed caller"| GATEWAY --> ENGINE
     HIDDEN --> ENGINE
+    EVAL -->|"SUCCESS + independent acknowledgement"| EXEC --> OPCUA --> LOCAL
+    EXEC --> RECEIPT
 ```
 
 `SimulatorGateway` 只由 Replay 模块调用。异常检测、诊断、案例检索、方向证据、候选生成和安全校验均不能读取模拟器隐藏状态或通过试算寻找参数。
+
+`DeviceExecutionService` 是另一条独立边界，不扩展任务主状态机，也不由诊断、检索、规划、确认或 `SimulatorGateway` 调用。浏览器不能提交 endpoint、node id、参数名或参数值。
 
 ## 技术栈
 
 | 层 | 当前实现 |
 |---|---|
-| 后端 | Python 3.11/3.12、FastAPI 0.128.8、Uvicorn 0.34.2 |
+| 后端 | Python 3.11/3.12、FastAPI 0.128.8、Uvicorn 0.34.2、asyncua 1.1.8（仅显式本地 sandbox） |
 | 前端 | React 19.2.5、TypeScript 7.0.2、Vite 8.1.4 |
 | 数据存储 | Python `sqlite3`，本地 SQLite 文件位于忽略目录 `var/` |
 | 机器学习与检索 | 固定 StandardScaler + multinomial logistic regression JSON 制品、纯 Python 推理、Decimal 结构化 KNN |
@@ -147,6 +163,14 @@ cmd /c ".venv\Scripts\activate.bat && start-tunewise.cmd"
 浏览器访问：<http://127.0.0.1:8000>
 
 `start-tunewise.cmd` 只绑定本机 loopback，设置 `PYTHONPATH` 后启动 FastAPI；首次运行会自动创建 `var/tunewise.db`。无需手工初始化数据库。
+
+默认启动不会开启设备写入。需要演示本地 OPC-UA sandbox 时，显式运行：
+
+```powershell
+start-tunewise-opcua-demo.cmd
+```
+
+两个 OPC-UA 启动脚本都只使用仓库内 `%~dp0.venv\Scripts\python.exe`，不会回退到 PATH Python；缺少 `.venv` 时会给出安装命令并以非零退出。demo 入口先确认 4841/8000 未占用，再启动固定监听 `127.0.0.1:4841` 的 sandbox；sandbox 未就绪时 Web 应用不会继续启动，Web 应用退出或 Ctrl+C 时会清理子进程。也可用 `start-tunewise-opcua-sandbox.cmd` 单独启动模拟设备。不要把这两个入口用于真实设备。
 
 ### 验证版本化资产
 
@@ -220,6 +244,7 @@ npm run build
 - 模拟器不参与诊断、检索或荐参，只在 Replay 边界内运行。
 - 数据、规则、模型、索引、候选、确认与结果均绑定版本及 SHA-256 哈希。
 - 运行时 LLM 调用、网络 API、真实设备调用均为 0。
+- Shadow 数据只有在显式 analysis contract 与当前冻结资产全部匹配后才允许运行离线分析；来源声明本身不会解锁诊断或安全候选。
 
 ## 项目验证
 
@@ -253,12 +278,14 @@ TuneWise/
 └─ start-tunewise.cmd      # Windows 本地启动入口
 ```
 
+授权数据的只读适配与影子分析入口见 [`docs/real-device-shadow-data.md`](docs/real-device-shadow-data.md)。仓库中的 `synthetic-contract-*` 仅是自动化契约 fixture，不是真实设备数据。
+
 ## 局限性
 
-- 尚未接入真实产线，未连接 MES、QMS 或真实设备。
+- 尚未接入真实产线，未连接 MES、QMS 或真实设备；新增 OPC-UA endpoint 仅是本机模拟设备。
 - 当前使用公开知识与规则化模拟数据，外部有效性尚未由真实生产数据验证。
 - 正式冻结盲测评估留给 TW-11；本基线不把规格中的质量门槛宣称为已完成报告。
-- 完整回放并发、拒绝、幂等和异常恢复留给 TW-09。
+- 原 TW-09 的完整回放并发、拒绝、幂等和异常恢复仍未实现；本阶段的设备执行幂等与失败凭证是独立聚合，不等同于完成 TW-09。
 - Windows 完整离线发行包留给 TW-13；当前源码启动仍需先准备依赖。
 - 当前仅覆盖单一 AA 工站和一个代表性的四角 MTF 不对称异常。
 - 任务关闭、复盘报告与新案例提交留给 TW-10；当前界面闭环止于 `REPLAYED`。
@@ -278,6 +305,8 @@ TuneWise/
 
 **待完成**
 
+- **复赛优先阶段（先于原 TW-09）**：见 [`docs/semifinal-engineering-roadmap.md`](docs/semifinal-engineering-roadmap.md)。包含 SF-01 OPC-UA sandbox 受控执行、SF-02 真实设备 shadow 数据适配、SF-03 shadow 评估协议；SF-04 飞书 AI 能力为后续独立工作，SF-05 复赛材料只在工程冻结后处理。
+- 以下原路线保持编号和历史含义，复赛优先阶段完成前暂缓执行：
 - TW-09：回放拒绝、幂等、并发与异常恢复；
 - TW-10：报告与待审核知识案例；
 - TW-11：正式离线评估；
@@ -289,3 +318,5 @@ TuneWise/
 TuneWise 是基于公开资料与规则约束模拟数据构建的比赛原型，不代表舜宇真实内部系统，不使用舜宇真实产线数据，不提供真实设备控制或质量放行能力。页面中的模型分数仅用于候选排序，参数候选不是最优参数，配对模拟回放也不构成真实世界因果证明。
 
 > **规则约束模拟环境中的离线回放结果，不代表真实产线良率改善。**
+>
+> **当前 OPC-UA 通道连接的是本地模拟设备，不代表已经完成真实设备接入或真实设备安全验证。**

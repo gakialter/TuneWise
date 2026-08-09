@@ -1,0 +1,79 @@
+{
+  "contract_version": "tw-shadow-analysis-contract-v1",
+  "analysis_version": "tw-shadow-analysis-v1",
+  "mapping_version": "tw-shadow-contract-fixture-mapping-v1",
+  "raw_file_sha256": "2afcbec6eb50f8dd555b84758b8f71fd0138fc464735fffcde66bc77bd27e6bc",
+  "canonical_schema_version": "tw-schema-v1",
+  "canonicalizer_version": "tw-canonicalizer-v1",
+  "canonical_observation_sha256": "aca64480cbef2a9da8f919d5a70df5d0718c5dbb6d8a8d496ff66af386c44c2f",
+  "input_data_version": "tw-shadow-contract-fixture-data-v1",
+  "product_model": "TW-AA-PROTOTYPE-V1",
+  "rule_set_version": "tw-rules-v1",
+  "control_limits": {
+    "snapshot_version": "tw-control-limits-v1",
+    "rule_set_version": "tw-rules-v1",
+    "center_lower_limit": "0.720000",
+    "corner_lower_limit": "0.620000",
+    "asymmetry_limit": "0.120000",
+    "corner_std_limit": "0.050000"
+  },
+  "spc_rules": {
+    "snapshot_version": "tw-spc-detection-v1",
+    "rule_set_version": "tw-rules-v1",
+    "minimum_sample_count": 8,
+    "minimum_consecutive_violations": 3,
+    "minimum_violation_ratio": "0.250000",
+    "center_clear_degradation_margin": "0.020000",
+    "global_corner_fraction": "0.750000"
+  },
+  "parameter_constraints": {
+    "snapshot_version": "tw-parameter-constraints-v1",
+    "product_model": "TW-AA-PROTOTYPE-V1",
+    "rule_set_version": "tw-rules-v1",
+    "constraints": {
+      "pitch": {
+        "nominal_value": "0.000000",
+        "minimum": "-1.000000",
+        "maximum": "1.000000",
+        "step": "0.050000",
+        "maximum_single_plan_delta": "0.200000"
+      },
+      "roll": {
+        "nominal_value": "0.000000",
+        "minimum": "-1.000000",
+        "maximum": "1.000000",
+        "step": "0.050000",
+        "maximum_single_plan_delta": "0.200000"
+      },
+      "x_offset": {
+        "nominal_value": "0.000000",
+        "minimum": "-1.000000",
+        "maximum": "1.000000",
+        "step": "0.050000",
+        "maximum_single_plan_delta": "0.200000"
+      },
+      "y_offset": {
+        "nominal_value": "0.000000",
+        "minimum": "-1.000000",
+        "maximum": "1.000000",
+        "step": "0.050000",
+        "maximum_single_plan_delta": "0.200000"
+      },
+      "z_offset": {
+        "nominal_value": "0.000000",
+        "minimum": "-1.000000",
+        "maximum": "1.000000",
+        "step": "0.050000",
+        "maximum_single_plan_delta": "0.100000"
+      }
+    }
+  },
+  "parameter_constraint_snapshot_sha256": "e6ce3fefc7bdff8939dbe355200773a18b936f15576dd1ec63be13bc7b8b0bb3",
+  "diagnostic_asset_manifest_sha256": "d2d287fcd830771c3b8c6e91f41152d950ea2a02820107c1ca802fb268b5ed4b",
+  "planning_asset_manifest_sha256": "fc73d61a29bcfbe89ab3b8f34cd0cf7436ff10c0716c59be8882b21be2881f4b",
+  "model_version": "tw-model-v1",
+  "preprocessing_version": "tw-preprocessing-v1",
+  "feature_definition_version": "tw-feature-definition-v1",
+  "safety_rule_version": "tw-parameter-safety-v1",
+  "case_library_mode": "DISABLED_SHADOW_ISOLATION"
+}

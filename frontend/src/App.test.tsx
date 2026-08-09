@@ -727,6 +727,111 @@ function replayResponse() {
   return { task, replay_result: result };
 }
 
+function deviceEligibilityResponse(eligible = true) {
+  return {
+    eligible,
+    code: eligible ? "ELIGIBLE" : "DEVICE_EXECUTION_DISABLED",
+    message: eligible
+      ? "写前资格、安全复核与设备当前值检查均通过。"
+      : "OPC-UA sandbox 设备执行未显式开启。",
+    execution_mode: "OPCUA_SANDBOX",
+    gateway_version: "tw-opcua-sandbox-gateway-v1",
+    node_mapping_version: "tw-opcua-node-mapping-v1",
+    endpoint_local_id: "tunewise-opcua-sandbox-local",
+    endpoint_fingerprint: "f".repeat(64),
+    observed_server_identity_hash: eligible ? "9".repeat(64) : null,
+    observed_application_uri: eligible ? "urn:tunewise:opcua:sandbox:server:v1" : null,
+    security_profile: eligible ? "LOCAL_ANONYMOUS_SANDBOX" : null,
+    device_connected: eligible,
+    device_status: eligible ? "READY" : "DISCONNECTED",
+    safety_gate_status: eligible ? "PASSED" : "NOT_EVALUATED",
+    replay_status: "SUCCESS",
+    parameter_name: eligible ? "pitch" : null,
+    node_id: eligible ? "nsu=urn:tunewise:opcua:sandbox:v1;s=parameters/pitch" : null,
+    expected_before_value: eligible ? "0.250000" : null,
+    actual_before_value: eligible ? "0.250000" : null,
+    requested_after_value: eligible ? "0.200000" : null,
+    tick_delta: eligible ? -1 : null,
+    disclaimer:
+      "当前 OPC-UA 通道连接的是本地模拟设备，不代表已经完成真实设备接入或真实设备安全验证。",
+  };
+}
+
+function deviceExecutionResponse(
+  executionStatus:
+    | "SUCCEEDED"
+    | "FAILED_DEFINITE"
+    | "UNKNOWN_OUTCOME"
+    | "RECONCILIATION_REQUIRED"
+    | "REJECTED" = "SUCCEEDED",
+) {
+  const succeeded = executionStatus === "SUCCEEDED";
+  const rejected = executionStatus === "REJECTED";
+  return {
+    device_execution: {
+      receipt_version: "tw-device-execution-receipt-v1",
+      receipt_canonicalizer_version: "tw-device-execution-canonicalizer-v1",
+      state_machine_version: "tw-device-execution-state-machine-v1",
+      device_execution_id: "tw-device-execution-fixed",
+      task_id: "tw-demo-task-001",
+      confirmed_plan_id: "tw-confirmed-plan-fixed",
+      confirmed_plan_hash: "c".repeat(64),
+      replay_result_id: "tw-replay-result-fixed",
+      replay_result_hash: "e".repeat(64),
+      execution_mode: "OPCUA_SANDBOX",
+      gateway_version: "tw-opcua-sandbox-gateway-v1",
+      namespace_uri: "urn:tunewise:opcua:sandbox:v1",
+      node_mapping_version: "tw-opcua-node-mapping-v1",
+      endpoint_local_id: "tunewise-opcua-sandbox-local",
+      endpoint_fingerprint: "f".repeat(64),
+      observed_server_identity_hash: "9".repeat(64),
+      observed_application_uri: "urn:tunewise:opcua:sandbox:server:v1",
+      security_profile: "LOCAL_ANONYMOUS_SANDBOX",
+      certificate_fingerprint: null,
+      parameter_name: "pitch",
+      node_id: "nsu=urn:tunewise:opcua:sandbox:v1;s=parameters/pitch",
+      expected_before_value: "0.250000",
+      actual_before_value: "0.250000",
+      requested_after_value: "0.200000",
+      actual_after_value: succeeded ? "0.200000" : rejected ? null : "0.230000",
+      tick_delta: -1,
+      safety_validator_version: "tw-parameter-safety-v1",
+      validation_result: executionStatus === "REJECTED" ? "REJECTED" : "PASSED",
+      execution_status: executionStatus,
+      failure_stage: succeeded ? null : rejected ? "QUALIFICATION" : "READBACK",
+      failure_code: succeeded
+        ? null
+        : rejected
+          ? "DEVICE_VALUE_CHANGED"
+          : "FAILED_READBACK_MISMATCH",
+      message: succeeded
+        ? "本地 OPC-UA 模拟设备写入与回读验证成功。"
+        : rejected
+          ? "设备当前值已变化，必须重新确认方案后再执行。"
+        : "OPC-UA write 返回后回读值与目标值不一致。",
+      device_status: "READY",
+      actor_id: "demo-aa-engineer",
+      actor_role: "AA_PROCESS_ENGINEER",
+      display_name: "AA工艺工程师",
+      started_at: "2026-08-04T12:00:00.000000Z",
+      completed_at: "2026-08-04T12:00:00.100000Z",
+      idempotency_key: "1".repeat(64),
+      attempt_count: 1,
+      internal_retry_count: 0,
+      write_attempt_count: rejected ? 0 : 1,
+      state_trace: succeeded
+        ? ["CREATED", "VALIDATING", "WRITE_STARTED", "SUCCEEDED"]
+        : rejected
+          ? ["CREATED", "VALIDATING", "REJECTED"]
+        : ["CREATED", "VALIDATING", "WRITE_STARTED", "FAILED_DEFINITE"],
+      disclaimer:
+        "当前 OPC-UA 通道连接的是本地模拟设备，不代表已经完成真实设备接入或真实设备安全验证。",
+      receipt_hash: "a".repeat(64),
+    },
+    idempotent_replay: false,
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -1698,7 +1803,7 @@ test("runs replay with only confirmed identity and renders accessible loading", 
       headers: { "Content-Type": "application/json" },
     }),
   );
-  expect(await screen.findByText("SUCCESS")).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "回放结果" })).toBeTruthy();
 });
 
 test("renders baseline reproduction before after checks hash and persistent disclaimers", async () => {
@@ -1726,4 +1831,257 @@ test("renders baseline reproduction before after checks hash and persistent disc
   expect(document.body.textContent).not.toContain("真实良率提升");
   expect(document.body.textContent).not.toContain("最优参数");
   expect(document.body.textContent).not.toContain("尚未进行模拟回放");
+});
+
+test("does not expose device execution before a successful replay", async () => {
+  const replayed = replayResponse().task;
+  const partialTask = {
+    ...replayed,
+    replay_result: {
+      ...replayed.replay_result,
+      replay_status: "PARTIAL_IMPROVEMENT",
+    },
+  };
+  const fetchMock = vi.fn().mockResolvedValueOnce(
+    new Response(JSON.stringify(partialTask), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+
+  expect(await screen.findByText("PARTIAL_IMPROVEMENT")).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "本地 OPC-UA 模拟设备受控下发" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "检查设备执行资格" })).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("shows the sandbox boundary after SUCCESS without checking eligibility automatically", async () => {
+  const fetchMock = vi.fn().mockResolvedValueOnce(
+    new Response(JSON.stringify(replayResponse().task), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+
+  expect(
+    await screen.findByRole("heading", { name: "本地 OPC-UA 模拟设备受控下发" }),
+  ).toBeTruthy();
+  expect(screen.getByText("本地模拟设备 · 非真实生产设备")).toBeTruthy();
+  expect(
+    screen.getByText(
+      /当前功能仅面向本地 OPC-UA 模拟设备，连接状态以上方服务端检查为准/,
+    ),
+  ).toBeTruthy();
+  expect(screen.getByText("模拟设备连接状态待确认")).toBeTruthy();
+  expect(screen.getByText(deviceEligibilityResponse().disclaimer)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "检查设备执行资格" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "向模拟设备执行受控下发" })).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("keeps controlled execution disabled when server eligibility rejects it", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(replayResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(deviceEligibilityResponse(false)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
+
+  expect(await screen.findByText("设备执行资格未通过")).toBeTruthy();
+  expect(screen.getByText("DEVICE_EXECUTION_DISABLED")).toBeTruthy();
+  expect(screen.getByText("设备执行功能未启用")).toBeTruthy();
+  expect(
+    (screen.getByRole("button", { name: "向模拟设备执行受控下发" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(screen.queryByRole("checkbox")).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+test("requires independent acknowledgement and submits only controlled sandbox identity", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(replayResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(deviceEligibilityResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(deviceExecutionResponse()), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
+
+  expect(await screen.findByText("设备执行资格已通过")).toBeTruthy();
+  expect(screen.getByText("pitch")).toBeTruthy();
+  expect(screen.getByText("-1 tick")).toBeTruthy();
+  const executeButton = screen.getByRole("button", { name: "向模拟设备执行受控下发" });
+  expect((executeButton as HTMLButtonElement).disabled).toBe(true);
+
+  const acknowledgement = screen.getByRole("checkbox", {
+    name: /我确认当前目标是本地 OPC-UA 模拟设备/,
+  });
+  fireEvent.click(acknowledgement);
+  expect((executeButton as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(executeButton);
+
+  expect(await screen.findByText("写入并回读验证成功")).toBeTruthy();
+  expect(screen.getByText("写后回读值").parentElement?.textContent).toContain("0.200000");
+  expect(screen.getByText("a".repeat(64))).toBeTruthy();
+  expect(fetchMock.mock.calls[1][0]).toBe(
+    `/api/tasks/tw-demo-task-001/device-executions/eligibility?confirmed_plan_id=tw-confirmed-plan-fixed&confirmed_plan_hash=${"c".repeat(64)}`,
+  );
+  const requestBody = JSON.parse(fetchMock.mock.calls[2][1].body as string);
+  expect(requestBody).toEqual({
+    confirmed_plan_id: "tw-confirmed-plan-fixed",
+    confirmed_plan_hash: "c".repeat(64),
+    execution_mode: "OPCUA_SANDBOX",
+    sandbox_execution_acknowledged: true,
+  });
+  for (const forbiddenField of ["endpoint", "node_id", "parameter_name", "value", "requested_after_value"]) {
+    expect(requestBody[forbiddenField]).toBeUndefined();
+  }
+  expect(
+    fetchMock.mock.calls.every(([url]) => typeof url === "string" && url.startsWith("/api/")),
+  ).toBe(true);
+});
+
+test("renders a failed readback as failure and never as success", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(replayResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(deviceEligibilityResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(deviceExecutionResponse("FAILED_DEFINITE")), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
+  await screen.findByText("设备执行资格已通过");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "向模拟设备执行受控下发" }));
+
+  expect(await screen.findByText("写入并回读验证明确失败")).toBeTruthy();
+  expect(screen.getByText("FAILED_READBACK_MISMATCH")).toBeTruthy();
+  expect(screen.getByText("写后回读值").parentElement?.textContent).toContain("0.230000");
+  expect(screen.queryByText("写入并回读验证成功")).toBeNull();
+});
+
+test("renders an execution-time qualification rejection and never as success", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(replayResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(deviceEligibilityResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(deviceExecutionResponse("REJECTED")), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
+  await screen.findByText("设备执行资格已通过");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "向模拟设备执行受控下发" }));
+
+  expect(await screen.findByText("受控下发已拒绝")).toBeTruthy();
+  expect(screen.getByText("DEVICE_VALUE_CHANGED")).toBeTruthy();
+  expect(screen.getByText("写入次数").parentElement?.textContent).toContain("0");
+  expect(screen.queryByText("写入并回读验证成功")).toBeNull();
+});
+
+test("renders an execution HTTP error and never as success", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(replayResponse().task), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(deviceEligibilityResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "OPCUA_ENDPOINT_UNAVAILABLE",
+            message: "本地 OPC-UA sandbox endpoint 当前不可用。",
+          },
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
+  await screen.findByText("设备执行资格已通过");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "向模拟设备执行受控下发" }));
+
+  expect(await screen.findByText("设备执行请求失败")).toBeTruthy();
+  expect(screen.getByText("OPCUA_ENDPOINT_UNAVAILABLE")).toBeTruthy();
+  expect(screen.getAllByText("本地 OPC-UA sandbox endpoint 当前不可用。")).toHaveLength(2);
+  expect(screen.queryByText("写入并回读验证成功")).toBeNull();
 });

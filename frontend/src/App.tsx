@@ -6,7 +6,11 @@ import {
   confirmParameterPlan,
   ConfirmedPlan,
   createInitialTask,
+  DeviceExecutionEligibility,
+  DeviceExecutionReceipt,
+  executeControlledDeviceWrite,
   generateParameterPlans,
+  getDeviceExecutionEligibility,
   importPresetAsset,
   ParameterPlanningResult,
   ReplayResult,
@@ -73,6 +77,19 @@ type PlanConfirmationState =
 type ReplayState =
   | { kind: "idle" }
   | { kind: "loading" }
+  | { kind: "error"; code: string; message: string };
+
+type DeviceExecutionState =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "eligibility"; eligibility: DeviceExecutionEligibility }
+  | { kind: "executing"; eligibility: DeviceExecutionEligibility }
+  | {
+      kind: "result";
+      eligibility: DeviceExecutionEligibility;
+      receipt: DeviceExecutionReceipt;
+      idempotentReplay: boolean;
+    }
   | { kind: "error"; code: string; message: string };
 
 const candidateTerminalConfirmationCodes = new Set([
@@ -900,6 +917,252 @@ function ReplayResultView({ result }: { result: ReplayResult }) {
   );
 }
 
+const deviceExecutionFallbackDisclaimer =
+  "当前 OPC-UA 通道连接的是本地模拟设备，不代表已经完成真实设备接入或真实设备安全验证。";
+
+function deviceValue(value: string | null): string {
+  return value ?? "—";
+}
+
+function tickDelta(value: number | null): string {
+  if (value === null) return "—";
+  return `${value > 0 ? "+" : ""}${value} tick`;
+}
+
+function DeviceExecutionPanel({
+  executionState,
+  acknowledged,
+  onCheckEligibility,
+  onAcknowledgedChange,
+  onExecute,
+}: {
+  executionState: DeviceExecutionState;
+  acknowledged: boolean;
+  onCheckEligibility: () => void;
+  onAcknowledgedChange: (checked: boolean) => void;
+  onExecute: () => void;
+}) {
+  const eligibility =
+    executionState.kind === "eligibility" ||
+    executionState.kind === "executing" ||
+    executionState.kind === "result"
+      ? executionState.eligibility
+      : null;
+  const receipt = executionState.kind === "result" ? executionState.receipt : null;
+  const idempotentReplay =
+    executionState.kind === "result" ? executionState.idempotentReplay : false;
+  const busy = executionState.kind === "checking" || executionState.kind === "executing";
+  const canExecute =
+    executionState.kind === "eligibility" &&
+    executionState.eligibility.eligible &&
+    acknowledged;
+  const succeeded = receipt?.execution_status === "SUCCEEDED";
+  const disclaimer =
+    receipt?.disclaimer ?? eligibility?.disclaimer ?? deviceExecutionFallbackDisclaimer;
+  const connectionStatus = (() => {
+    if (executionState.kind === "idle") {
+      return "模拟设备连接状态待确认";
+    }
+    if (executionState.kind === "checking") {
+      return "正在检查模拟设备连接与执行资格";
+    }
+    if (executionState.kind === "error") {
+      return executionState.message;
+    }
+    if (eligibility?.code === "DEVICE_EXECUTION_DISABLED") {
+      return "设备执行功能未启用";
+    }
+    if (eligibility?.device_connected) {
+      return "已连接本地 OPC-UA 模拟设备";
+    }
+    return eligibility?.message ?? "模拟设备不可用";
+  })();
+
+  return (
+    <section className="device-execution-panel" aria-labelledby="device-execution-title">
+      <div className="device-execution-heading">
+        <div>
+          <p className="section-kicker">服务端门禁 · OPC-UA sandbox</p>
+          <h2 id="device-execution-title">本地 OPC-UA 模拟设备受控下发</h2>
+          <p>
+            仅在人工确认方案和确定性回放通过后，由服务端对白名单节点执行写前校验、写入与回读。
+          </p>
+        </div>
+        <span className="sandbox-badge">本地模拟设备 · 非真实生产设备</span>
+      </div>
+
+      <dl className="device-status-grid">
+        <div>
+          <dt>执行模式</dt>
+          <dd>{eligibility?.execution_mode ?? "待服务端确认"}</dd>
+        </div>
+        <div>
+          <dt>设备连接</dt>
+          <dd className={eligibility?.device_connected ? "device-value-passed" : undefined}>
+            {connectionStatus}
+          </dd>
+        </div>
+        <div>
+          <dt>安全门禁</dt>
+          <dd className={eligibility?.safety_gate_status === "PASSED" ? "device-value-passed" : undefined}>
+            {eligibility?.safety_gate_status ?? "待检查"}
+          </dd>
+        </div>
+        <div>
+          <dt>回放状态</dt>
+          <dd className="device-value-passed">{eligibility?.replay_status ?? "SUCCESS"}</dd>
+        </div>
+      </dl>
+
+      {executionState.kind !== "result" && (
+        <div className="device-check-action">
+          <div>
+            <strong>人工确认后的受控写入</strong>
+            <p>endpoint、节点映射和参数值均由服务端固定，页面不能指定。</p>
+          </div>
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={busy}
+            onClick={onCheckEligibility}
+          >
+            {executionState.kind === "checking"
+              ? "正在检查资格…"
+              : eligibility
+                ? "重新检查设备执行资格"
+                : "检查设备执行资格"}
+          </button>
+        </div>
+      )}
+
+      {executionState.kind === "checking" && (
+        <div className="device-progress" role="status" aria-live="polite">
+          <span className="inline-loader" />
+          <span>正在检查模拟设备连接与执行资格</span>
+        </div>
+      )}
+
+      {executionState.kind === "error" && (
+        <div className="inline-error device-inline-message" role="alert">
+          <div>
+            <strong>设备执行请求失败</strong>
+            <p>{executionState.message}</p>
+          </div>
+          <code>{executionState.code}</code>
+        </div>
+      )}
+
+      {eligibility && (
+        <>
+          <div
+            className={`device-gate-result ${eligibility.eligible ? "device-gate-passed" : "device-gate-rejected"}`}
+            role={eligibility.eligible ? "status" : "alert"}
+            aria-live="polite"
+          >
+            <div>
+              <strong>{eligibility.eligible ? "设备执行资格已通过" : "设备执行资格未通过"}</strong>
+              <p>{eligibility.message}</p>
+            </div>
+            <code>{eligibility.code}</code>
+          </div>
+
+          <dl className="device-parameter-grid">
+            <div><dt>参数</dt><dd>{deviceValue(eligibility.parameter_name)}</dd></div>
+            <div><dt>计划写入前值</dt><dd>{deviceValue(eligibility.expected_before_value)}</dd></div>
+            <div><dt>设备当前值</dt><dd>{deviceValue(eligibility.actual_before_value)}</dd></div>
+            <div><dt>目标值</dt><dd>{deviceValue(eligibility.requested_after_value)}</dd></div>
+            <div><dt>tick 变化</dt><dd>{tickDelta(eligibility.tick_delta)}</dd></div>
+            <div><dt>本地 endpoint</dt><dd>{eligibility.endpoint_local_id}</dd></div>
+            <div><dt>节点映射版本</dt><dd>{eligibility.node_mapping_version}</dd></div>
+            <div><dt>服务端节点</dt><dd>{deviceValue(eligibility.node_id)}</dd></div>
+          </dl>
+
+          {executionState.kind !== "result" && (
+            <div className="device-execution-confirmation">
+              {eligibility.eligible && (
+                <label htmlFor="sandbox-execution-acknowledgement">
+                  <input
+                    id="sandbox-execution-acknowledgement"
+                    type="checkbox"
+                    checked={acknowledged}
+                    disabled={executionState.kind === "executing"}
+                    onChange={(event) => onAcknowledgedChange(event.target.checked)}
+                  />
+                  <span>
+                    我确认当前目标是本地 OPC-UA 模拟设备，并授权执行这一次写入与回读验证。
+                  </span>
+                </label>
+              )}
+              <button
+                className="primary-action device-execution-action"
+                type="button"
+                disabled={!canExecute || busy}
+                onClick={onExecute}
+              >
+                {executionState.kind === "executing"
+                  ? "正在写入并回读验证…"
+                  : "向模拟设备执行受控下发"}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {executionState.kind === "executing" && (
+        <div className="device-progress" role="status" aria-live="polite">
+          <span className="inline-loader" />
+          <span>WRITE_STARTED · 正在调用设备侧原子条件执行并等待明确结果…</span>
+        </div>
+      )}
+
+      {receipt && (
+        <div className="device-receipt">
+          <div
+            className={`device-execution-result ${succeeded ? "device-execution-succeeded" : "device-execution-failed"}`}
+            role={succeeded ? "status" : "alert"}
+            aria-live="polite"
+          >
+            <div>
+              <strong>
+                {succeeded
+                  ? "写入并回读验证成功"
+                  : receipt.execution_status === "REJECTED"
+                    ? "受控下发已拒绝"
+                    : receipt.execution_status === "UNKNOWN_OUTCOME" ||
+                        receipt.execution_status === "RECONCILIATION_REQUIRED"
+                      ? "执行结果未知，需要只读核对"
+                      : "写入并回读验证明确失败"}
+              </strong>
+              <p>{receipt.message}</p>
+            </div>
+            <code>{receipt.failure_code ?? receipt.execution_status}</code>
+          </div>
+          <dl className="device-receipt-grid">
+            <div><dt>执行状态</dt><dd>{receipt.execution_status}</dd></div>
+            <div><dt>写前实际值</dt><dd>{deviceValue(receipt.actual_before_value)}</dd></div>
+            <div><dt>请求目标值</dt><dd>{deviceValue(receipt.requested_after_value)}</dd></div>
+            <div><dt>写后回读值</dt><dd>{deviceValue(receipt.actual_after_value)}</dd></div>
+            <div><dt>写入次数</dt><dd>{receipt.write_attempt_count}</dd></div>
+            <div><dt>幂等结果</dt><dd>{idempotentReplay ? "复用首次凭证" : "首次执行"}</dd></div>
+            <div className="device-receipt-hash">
+              <dt>receipt hash</dt>
+              <dd title={receipt.receipt_hash}>{receipt.receipt_hash}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
+
+      <div className="device-disclaimer">
+        <strong>
+          当前功能仅面向本地 OPC-UA 模拟设备，连接状态以上方服务端检查为准；
+          非真实生产设备、非真实安全验证，执行结果不代表真实产线良率改善。
+        </strong>
+        <p>{disclaimer}</p>
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [importState, setImportState] = useState<ImportState>({ kind: "idle" });
@@ -921,6 +1184,10 @@ function App() {
   const [confirmationState, setConfirmationState] =
     useState<PlanConfirmationState>({ kind: "idle" });
   const [replayState, setReplayState] = useState<ReplayState>({ kind: "idle" });
+  const [deviceExecutionState, setDeviceExecutionState] =
+    useState<DeviceExecutionState>({ kind: "idle" });
+  const [deviceExecutionAcknowledged, setDeviceExecutionAcknowledged] =
+    useState(false);
 
   useEffect(() => {
     let active = true;
@@ -986,6 +1253,9 @@ function App() {
       setInvalidCandidateIds(new Set());
       setConfirmationContextInvalid(false);
       setConfirmationState({ kind: "idle" });
+      setReplayState({ kind: "idle" });
+      setDeviceExecutionState({ kind: "idle" });
+      setDeviceExecutionAcknowledged(false);
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setImportState({ kind: "error", code: error.code, message: error.message });
@@ -1015,6 +1285,9 @@ function App() {
       setInvalidCandidateIds(new Set());
       setConfirmationContextInvalid(false);
       setConfirmationState({ kind: "idle" });
+      setReplayState({ kind: "idle" });
+      setDeviceExecutionState({ kind: "idle" });
+      setDeviceExecutionAcknowledged(false);
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setDetectionState({
@@ -1048,6 +1321,9 @@ function App() {
       setInvalidCandidateIds(new Set());
       setConfirmationContextInvalid(false);
       setConfirmationState({ kind: "idle" });
+      setReplayState({ kind: "idle" });
+      setDeviceExecutionState({ kind: "idle" });
+      setDeviceExecutionAcknowledged(false);
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setDiagnosisState({ kind: "error", code: error.code, message: error.message });
@@ -1104,6 +1380,9 @@ function App() {
       setInvalidCandidateIds(new Set());
       setConfirmationContextInvalid(false);
       setConfirmationState({ kind: "idle" });
+      setReplayState({ kind: "idle" });
+      setDeviceExecutionState({ kind: "idle" });
+      setDeviceExecutionAcknowledged(false);
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setParameterPlanningState({
@@ -1142,6 +1421,9 @@ function App() {
       );
       setState({ kind: "ready", task: response.task });
       setConfirmationState({ kind: "success", plan: response.confirmed_plan });
+      setReplayState({ kind: "idle" });
+      setDeviceExecutionState({ kind: "idle" });
+      setDeviceExecutionAcknowledged(false);
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         if (candidateTerminalConfirmationCodes.has(error.code)) {
@@ -1188,6 +1470,8 @@ function App() {
       );
       setState({ kind: "ready", task: response.task });
       setReplayState({ kind: "idle" });
+      setDeviceExecutionState({ kind: "idle" });
+      setDeviceExecutionAcknowledged(false);
     } catch (error: unknown) {
       if (error instanceof TaskCreationError) {
         setReplayState({ kind: "error", code: error.code, message: error.message });
@@ -1197,6 +1481,76 @@ function App() {
         kind: "error",
         code: "PAIRED_REPLAY_FAILED",
         message: "本地确定性配对模拟干预回放暂时不可用。",
+      });
+    }
+  }
+
+  async function handleDeviceEligibility() {
+    const plan = task.confirmed_plan;
+    if (!plan || task.replay_result?.replay_status !== "SUCCESS") return;
+    setDeviceExecutionAcknowledged(false);
+    setDeviceExecutionState({ kind: "checking" });
+    try {
+      const eligibility = await getDeviceExecutionEligibility(
+        task.task_id,
+        plan.confirmed_plan_id,
+        plan.confirmed_plan_hash,
+      );
+      setDeviceExecutionState({ kind: "eligibility", eligibility });
+    } catch (error: unknown) {
+      if (error instanceof TaskCreationError) {
+        setDeviceExecutionState({
+          kind: "error",
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      setDeviceExecutionState({
+        kind: "error",
+        code: "DEVICE_EXECUTION_ELIGIBILITY_FAILED",
+        message: "无法读取本地模拟设备执行资格。",
+      });
+    }
+  }
+
+  async function handleDeviceExecution() {
+    const plan = task.confirmed_plan;
+    if (
+      !plan ||
+      task.replay_result?.replay_status !== "SUCCESS" ||
+      deviceExecutionState.kind !== "eligibility" ||
+      !deviceExecutionState.eligibility.eligible ||
+      !deviceExecutionAcknowledged
+    ) return;
+    const eligibility = deviceExecutionState.eligibility;
+    setDeviceExecutionState({ kind: "executing", eligibility });
+    try {
+      const response = await executeControlledDeviceWrite(
+        task.task_id,
+        plan.confirmed_plan_id,
+        plan.confirmed_plan_hash,
+      );
+      setDeviceExecutionState({
+        kind: "result",
+        eligibility,
+        receipt: response.device_execution,
+        idempotentReplay: response.idempotent_replay,
+      });
+    } catch (error: unknown) {
+      setDeviceExecutionAcknowledged(false);
+      if (error instanceof TaskCreationError) {
+        setDeviceExecutionState({
+          kind: "error",
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      setDeviceExecutionState({
+        kind: "error",
+        code: "DEVICE_EXECUTION_FAILED",
+        message: "本地 OPC-UA 模拟设备通信或执行服务暂时不可用。",
       });
     }
   }
@@ -1630,6 +1984,16 @@ function App() {
             )}
             {task.replay_result && <ReplayResultView result={task.replay_result} />}
           </section>
+        )}
+
+        {task.replay_result?.replay_status === "SUCCESS" && (
+          <DeviceExecutionPanel
+            executionState={deviceExecutionState}
+            acknowledged={deviceExecutionAcknowledged}
+            onCheckEligibility={handleDeviceEligibility}
+            onAcknowledgedChange={setDeviceExecutionAcknowledged}
+            onExecute={handleDeviceExecution}
+          />
         )}
 
         <section className="stage-panel" aria-labelledby="workflow-title">

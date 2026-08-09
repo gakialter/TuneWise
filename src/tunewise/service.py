@@ -23,6 +23,10 @@ from .case_retrieval import (
     record_case_retrieval,
 )
 from .domain import Task, TaskStatus, workflow_for
+from .device_execution import (
+    DeviceExecutionQualification,
+    DeviceQualificationError,
+)
 from .detection import (
     DETECTION_RESULT_VERSION,
     AnomalyDetectionRecord,
@@ -1819,6 +1823,162 @@ class TaskService:
             computation=computation,
             evaluation_rules=evaluation_rules,
             request_idempotency_key=request_idempotency_key,
+        )
+
+    def qualify_device_execution(
+        self,
+        task_id: str,
+        confirmed_plan_id: str,
+        confirmed_plan_hash: str,
+    ) -> DeviceExecutionQualification:
+        try:
+            task = self.get_task(task_id)
+        except (PlanConfirmationGuardError, ReplayGuardError) as error:
+            raise DeviceQualificationError(
+                getattr(error, "code", "CONFIRMED_PLAN_INVALID"),
+                getattr(error, "message", "ConfirmedPlan 完整性校验失败。"),
+            ) from error
+        if task is None:
+            raise DeviceQualificationError("TASK_NOT_FOUND", "调机任务不存在。")
+        try:
+            plan = self._validate_replay_plan(
+                task,
+                confirmed_plan_id,
+                confirmed_plan_hash,
+            )
+        except ReplayGuardError as error:
+            mapped_code = (
+                "SAFETY_REVALIDATION_FAILED"
+                if error.code == "CONFIRMED_PLAN_SAFETY_INVALID"
+                else error.code
+            )
+            raise DeviceQualificationError(mapped_code, error.message) from error
+        try:
+            replay_result = self._store.get_current_replay_result(task_id)
+        except ReplayGuardError as error:
+            raise DeviceQualificationError(error.code, error.message) from error
+        if replay_result is None or task.replay_result is None:
+            raise DeviceQualificationError(
+                "REPLAY_RESULT_NOT_FOUND",
+                "当前 ConfirmedPlan 缺少 ReplayResult。",
+            )
+        if task.status is not TaskStatus.REPLAYED:
+            raise DeviceQualificationError(
+                "TASK_NOT_REPLAYED",
+                "只有已完成确定性离线回放的任务可以执行 OPC-UA sandbox 下发。",
+                replay_result_id=replay_result.replay_result_id,
+                replay_result_hash=replay_result.result_hash,
+            )
+        if (
+            replay_result.task_id != task_id
+            or replay_result.confirmed_plan_id != plan.confirmed_plan_id
+            or replay_result.confirmed_plan_hash != plan.confirmed_plan_hash
+            or replay_result.candidate_id != plan.candidate_id
+            or replay_result.candidate_hash != plan.candidate_hash
+        ):
+            raise DeviceQualificationError(
+                "REPLAY_PLAN_BINDING_MISMATCH",
+                "ReplayResult 未绑定当前 ConfirmedPlan。",
+                replay_result_id=replay_result.replay_result_id,
+                replay_result_hash=replay_result.result_hash,
+            )
+        if replay_result.baseline_reproduction_status != "PASSED":
+            raise DeviceQualificationError(
+                "BASELINE_REPRODUCTION_FAILED",
+                "ReplayResult baseline reproduction 未通过。",
+                replay_result_id=replay_result.replay_result_id,
+                replay_result_hash=replay_result.result_hash,
+            )
+        planning = self._store.get_current_parameter_planning(task_id)
+        if planning is None:
+            raise DeviceQualificationError(
+                "CONFIRMED_PLAN_NOT_FRESH",
+                "当前参数规划结果已缺失。",
+                replay_result_id=replay_result.replay_result_id,
+                replay_result_hash=replay_result.result_hash,
+            )
+        candidate = next(
+            (
+                item
+                for item in planning.ordered_candidates
+                if item.candidate_id == plan.candidate_id
+            ),
+            None,
+        )
+        if candidate is None or candidate_content_hash(candidate) != plan.candidate_hash:
+            raise DeviceQualificationError(
+                "CONFIRMED_PLAN_NOT_FRESH",
+                "ConfirmedPlan 绑定的候选内容已变化。",
+                replay_result_id=replay_result.replay_result_id,
+                replay_result_hash=replay_result.result_hash,
+            )
+        try:
+            binding, snapshot, planning_assets = self._confirmation_binding(
+                task,
+                planning,
+                candidate,
+            )
+        except (
+            PlanConfirmationGuardError,
+            ParameterPlanningAssetError,
+            CaseRetrievalAssetError,
+            CaseRetrievalGuardError,
+            ConfirmationStateChangedError,
+        ) as error:
+            raise DeviceQualificationError(
+                "CONFIRMED_PLAN_NOT_FRESH",
+                "ConfirmedPlan 的当前版本、快照或资产绑定已失效。",
+                replay_result_id=replay_result.replay_result_id,
+                replay_result_hash=replay_result.result_hash,
+            ) from error
+        freshness = ConfirmedPlanFreshnessEvaluator().evaluate(plan, binding)
+        if not freshness.replay_eligible:
+            raise DeviceQualificationError(
+                "CONFIRMED_PLAN_NOT_FRESH",
+                "ConfirmedPlan freshness check 未通过。",
+                replay_result_id=replay_result.replay_result_id,
+                replay_result_hash=replay_result.result_hash,
+            )
+        safety = ParameterSafetyValidator(planning_assets.safety_policy).validate(
+            candidate,
+            snapshot=snapshot,
+            versions=SafetyVersionContext(
+                constraint_snapshot_version=binding.parameter_constraint_snapshot_version,
+                rule_set_version=binding.rule_set_version,
+                direction_rule_version=binding.direction_rule_version,
+                safety_rule_version=binding.safety_rule_version,
+                diagnostic_result_version=binding.diagnostic_result_version,
+                case_retrieval_result_version=binding.case_retrieval_result_version,
+            ),
+        )
+        changed_parameters = tuple(
+            name
+            for name in sorted(plan.current_values)
+            if plan.current_values[name] != plan.proposed_values.get(name)
+        )
+        return DeviceExecutionQualification(
+            task_id=task_id,
+            confirmed_plan_id=plan.confirmed_plan_id,
+            confirmed_plan_hash=plan.confirmed_plan_hash,
+            replay_result_id=replay_result.replay_result_id,
+            replay_result_hash=replay_result.result_hash,
+            replay_status=replay_result.replay_status,
+            baseline_reproduction_status=replay_result.baseline_reproduction_status,
+            parameter_family=plan.parameter_family,
+            current_values=plan.current_values,
+            proposed_values=plan.proposed_values,
+            delta_ticks={
+                name: int(plan.delta_ticks[name])
+                for name in changed_parameters
+                if name in plan.delta_ticks
+            },
+            changed_parameters=changed_parameters,
+            safety_validator_version=safety.safety_rule_version,
+            safety_validation_result=safety.validation_status,
+            actor_id=task.actor.actor_id,
+            actor_role=task.actor.actor_role,
+            display_name=task.actor.display_name,
+            confirmed_at=plan.confirmed_at,
         )
 
     def has_task(self, task_id: str) -> bool:

@@ -1,0 +1,169 @@
+{
+  "manifest_version": "tw-shadow-mapping-manifest-v1",
+  "mapping_version": "tw-shadow-contract-fixture-mapping-v1",
+  "canonical_schema_version": "tw-schema-v1",
+  "canonicalizer_version": "tw-canonicalizer-v1",
+  "source_type": "CONTRACT_FIXTURE",
+  "source_metadata": {
+    "declared_by": "TuneWise automated contract tests",
+    "declared_at": "2026-08-04T00:00:00Z",
+    "provenance_statement": "Synthetic contract fixture generated only to verify the shadow-data mapping contract; this is not real device or production data.",
+    "device_model_declared": "SYNTHETIC_CONTRACT_DEVICE_NOT_REAL",
+    "authorization_reference": "LOCAL_TEST_FIXTURE_ONLY",
+    "data_reality": "SYNTHETIC_CONTRACT_FIXTURE"
+  },
+  "column_mappings": [
+    {
+      "external_column": "sample_no",
+      "canonical_field": "sample_index",
+      "classification": "IDENTIFIER",
+      "required": true,
+      "source_unit": "COUNT",
+      "canonical_unit": "COUNT",
+      "conversion": {"kind": "INTEGER_IDENTITY", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "event_time",
+      "canonical_field": "timestamp",
+      "classification": "TIMESTAMP",
+      "required": true,
+      "source_unit": "ISO8601",
+      "canonical_unit": "ISO8601",
+      "conversion": {"kind": "TIMESTAMP_ISO8601", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "x_normalized",
+      "canonical_field": "x_offset",
+      "classification": "PARAMETER",
+      "required": true,
+      "source_unit": "NORMALIZED_OFFSET_UNIT",
+      "canonical_unit": "NORMALIZED_OFFSET_UNIT",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "y_normalized",
+      "canonical_field": "y_offset",
+      "classification": "PARAMETER",
+      "required": true,
+      "source_unit": "NORMALIZED_OFFSET_UNIT",
+      "canonical_unit": "NORMALIZED_OFFSET_UNIT",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "pitch_normalized",
+      "canonical_field": "pitch",
+      "classification": "PARAMETER",
+      "required": true,
+      "source_unit": "NORMALIZED_ANGULAR_UNIT",
+      "canonical_unit": "NORMALIZED_ANGULAR_UNIT",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "roll_normalized",
+      "canonical_field": "roll",
+      "classification": "PARAMETER",
+      "required": true,
+      "source_unit": "NORMALIZED_ANGULAR_UNIT",
+      "canonical_unit": "NORMALIZED_ANGULAR_UNIT",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "z_normalized",
+      "canonical_field": "z_offset",
+      "classification": "PARAMETER",
+      "required": true,
+      "source_unit": "NORMALIZED_OFFSET_UNIT",
+      "canonical_unit": "NORMALIZED_OFFSET_UNIT",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "vibration_normalized",
+      "canonical_field": "vibration_rms",
+      "classification": "OBSERVATION",
+      "required": true,
+      "source_unit": "NORMALIZED_PROTOTYPE_UNIT",
+      "canonical_unit": "NORMALIZED_PROTOTYPE_UNIT",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "repeat_error_normalized",
+      "canonical_field": "repeat_position_error",
+      "classification": "OBSERVATION",
+      "required": true,
+      "source_unit": "NORMALIZED_PROTOTYPE_UNIT",
+      "canonical_unit": "NORMALIZED_PROTOTYPE_UNIT",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "residual_x_normalized",
+      "canonical_field": "calibration_residual_x",
+      "classification": "OBSERVATION",
+      "required": true,
+      "source_unit": "NORMALIZED_PROTOTYPE_UNIT",
+      "canonical_unit": "NORMALIZED_PROTOTYPE_UNIT",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "residual_y_normalized",
+      "canonical_field": "calibration_residual_y",
+      "classification": "OBSERVATION",
+      "required": true,
+      "source_unit": "NORMALIZED_PROTOTYPE_UNIT",
+      "canonical_unit": "NORMALIZED_PROTOTYPE_UNIT",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "1", "offset": "0"}
+    },
+    {
+      "external_column": "mtf_center_percent",
+      "canonical_field": "mtf_center",
+      "classification": "OBSERVATION",
+      "required": true,
+      "source_unit": "PERCENT",
+      "canonical_unit": "NORMALIZED_MTF",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "0.01", "offset": "0"}
+    },
+    {
+      "external_column": "mtf_lt_percent",
+      "canonical_field": "mtf_lt",
+      "classification": "OBSERVATION",
+      "required": true,
+      "source_unit": "PERCENT",
+      "canonical_unit": "NORMALIZED_MTF",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "0.01", "offset": "0"}
+    },
+    {
+      "external_column": "mtf_rt_percent",
+      "canonical_field": "mtf_rt",
+      "classification": "OBSERVATION",
+      "required": true,
+      "source_unit": "PERCENT",
+      "canonical_unit": "NORMALIZED_MTF",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "0.01", "offset": "0"}
+    },
+    {
+      "external_column": "mtf_lb_percent",
+      "canonical_field": "mtf_lb",
+      "classification": "OBSERVATION",
+      "required": true,
+      "source_unit": "PERCENT",
+      "canonical_unit": "NORMALIZED_MTF",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "0.01", "offset": "0"}
+    },
+    {
+      "external_column": "mtf_rb_percent",
+      "canonical_field": "mtf_rb",
+      "classification": "OBSERVATION",
+      "required": true,
+      "source_unit": "PERCENT",
+      "canonical_unit": "NORMALIZED_MTF",
+      "conversion": {"kind": "DECIMAL_AFFINE", "scale": "0.01", "offset": "0"}
+    }
+  ],
+  "context_mappings": [
+    {"external_column": "batch_code", "canonical_field": "batch_id", "required": true},
+    {"external_column": "lot_code", "canonical_field": "lot_id", "required": true}
+  ],
+  "reviewed_outcome_mappings": [],
+  "ignored_columns": [],
+  "expected_raw_file_sha256": "2afcbec6eb50f8dd555b84758b8f71fd0138fc464735fffcde66bc77bd27e6bc",
+  "expected_canonical_observation_sha256": "aca64480cbef2a9da8f919d5a70df5d0718c5dbb6d8a8d496ff66af386c44c2f"
+}

@@ -46,6 +46,12 @@ from .plan_confirmation import (
     deserialize_confirmed_plan,
 )
 from .replay import ReplayResult, deserialize_replay_result
+from .device_execution import (
+    DeviceExecutionClaim,
+    DeviceExecutionConflictError,
+    DeviceExecutionReceipt,
+    deserialize_device_execution_receipt,
+)
 
 
 class ImportSnapshotConflictError(RuntimeError):
@@ -159,6 +165,7 @@ class TaskStore:
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._database_path)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
     @staticmethod
@@ -336,6 +343,29 @@ class TaskStore:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS current_replay_results ("
                 "task_id TEXT PRIMARY KEY, replay_result_id TEXT NOT NULL UNIQUE)"
+            )
+            self._apply_migrations(connection)
+
+    @staticmethod
+    def _apply_migrations(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS schema_migrations ("
+            "version TEXT PRIMARY KEY, applied_at TEXT NOT NULL "
+            "DEFAULT CURRENT_TIMESTAMP)"
+        )
+        migration_root = Path(__file__).with_name("migrations")
+        for migration_path in sorted(migration_root.glob("*.sql")):
+            version = migration_path.stem
+            applied = connection.execute(
+                "SELECT 1 FROM schema_migrations WHERE version = ?",
+                (version,),
+            ).fetchone()
+            if applied is not None:
+                continue
+            connection.executescript(migration_path.read_text(encoding="utf-8"))
+            connection.execute(
+                "INSERT INTO schema_migrations (version) VALUES (?)",
+                (version,),
             )
 
     def get(self, task_id: str) -> Task | None:
@@ -1484,6 +1514,306 @@ class TaskStore:
                 (task_id,),
             ).fetchall()
         return tuple(AuditEvent(**json.loads(row["payload_json"])) for row in rows)
+
+    def claim_device_execution(
+        self,
+        *,
+        device_execution_id: str,
+        task_id: str,
+        idempotency_key: str,
+        owner_instance_id: str,
+        started_at: str,
+        server_identity_hash: str,
+        server_identity_json: str | None,
+        node_mapping_version: str,
+        expected_before_value: str | None,
+        requested_after_value: str | None,
+        confirmed_plan_hash: str | None,
+        replay_result_hash: str | None,
+        parameter_name: str | None,
+        node_id: str | None,
+        recovery_payload_json: str | None,
+    ) -> DeviceExecutionClaim:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            claim_row = connection.execute(
+                "SELECT device_execution_id, task_id, owner_instance_id, "
+                "status, started_at, server_identity_hash, recovery_payload_json "
+                "FROM device_execution_claims "
+                "WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+            if claim_row is not None:
+                if (
+                    claim_row["device_execution_id"] != device_execution_id
+                    or claim_row["task_id"] != task_id
+                ):
+                    raise DeviceExecutionConflictError(
+                        "DEVICE_EXECUTION_IDEMPOTENCY_CONFLICT",
+                        "设备执行幂等键与现有任务绑定冲突。",
+                    )
+                receipt_row = connection.execute(
+                    "SELECT payload_json FROM device_execution_receipts "
+                    "WHERE idempotency_key = ?",
+                    (idempotency_key,),
+                ).fetchone()
+                receipt = (
+                    None
+                    if receipt_row is None
+                    else deserialize_device_execution_receipt(
+                        json.loads(receipt_row["payload_json"])
+                    )
+                )
+                return DeviceExecutionClaim(
+                    status=claim_row["status"],
+                    owner_instance_id=claim_row["owner_instance_id"],
+                    started_at=claim_row["started_at"],
+                    receipt=receipt,
+                    device_execution_id=claim_row["device_execution_id"],
+                    task_id=claim_row["task_id"],
+                    idempotency_key=idempotency_key,
+                    server_identity_hash=claim_row["server_identity_hash"],
+                    recovery_payload=(
+                        None
+                        if claim_row["recovery_payload_json"] is None
+                        else json.loads(claim_row["recovery_payload_json"])
+                    ),
+                )
+            connection.execute(
+                "INSERT INTO device_execution_claims ("
+                "device_execution_id, task_id, idempotency_key, "
+                "owner_instance_id, status, started_at, server_identity_hash, "
+                "server_identity_json, node_mapping_version, expected_before_value, "
+                "requested_after_value, confirmed_plan_hash, replay_result_hash, "
+                "parameter_name, node_id, recovery_payload_json) "
+                "VALUES (?, ?, ?, ?, 'VALIDATING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    device_execution_id,
+                    task_id,
+                    idempotency_key,
+                    owner_instance_id,
+                    started_at,
+                    server_identity_hash,
+                    server_identity_json,
+                    node_mapping_version,
+                    expected_before_value,
+                    requested_after_value,
+                    confirmed_plan_hash,
+                    replay_result_hash,
+                    parameter_name,
+                    node_id,
+                    recovery_payload_json,
+                ),
+            )
+        return DeviceExecutionClaim(
+            status="VALIDATING",
+            owner_instance_id=owner_instance_id,
+            started_at=started_at,
+            device_execution_id=device_execution_id,
+            task_id=task_id,
+            idempotency_key=idempotency_key,
+            server_identity_hash=server_identity_hash,
+            recovery_payload=(
+                None
+                if recovery_payload_json is None
+                else json.loads(recovery_payload_json)
+            ),
+        )
+
+    def list_reconcilable_device_executions(self) -> tuple[DeviceExecutionClaim, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT device_execution_id, task_id, idempotency_key, "
+                "owner_instance_id, status, started_at, server_identity_hash, "
+                "recovery_payload_json FROM device_execution_claims "
+                "WHERE status IN ('WRITE_STARTED', 'UNKNOWN_OUTCOME', "
+                "'RECONCILIATION_REQUIRED') ORDER BY started_at, idempotency_key"
+            ).fetchall()
+        return tuple(
+            DeviceExecutionClaim(
+                status=row["status"],
+                owner_instance_id=row["owner_instance_id"],
+                started_at=row["started_at"],
+                device_execution_id=row["device_execution_id"],
+                task_id=row["task_id"],
+                idempotency_key=row["idempotency_key"],
+                server_identity_hash=row["server_identity_hash"],
+                recovery_payload=(
+                    None
+                    if row["recovery_payload_json"] is None
+                    else json.loads(row["recovery_payload_json"])
+                ),
+            )
+            for row in rows
+        )
+
+    def mark_device_execution_write_started(
+        self,
+        *,
+        idempotency_key: str,
+        owner_instance_id: str,
+        started_at: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                "UPDATE device_execution_claims SET status = 'WRITE_STARTED', "
+                "write_started_at = ? WHERE idempotency_key = ? "
+                "AND owner_instance_id = ? AND status = 'VALIDATING'",
+                (started_at, idempotency_key, owner_instance_id),
+            )
+            if cursor.rowcount != 1:
+                raise DeviceExecutionConflictError(
+                    "DEVICE_EXECUTION_CLAIM_CONFLICT",
+                    "设备执行 claim 无法进入 WRITE_STARTED。",
+                )
+
+    def mark_device_execution_unknown(
+        self,
+        *,
+        idempotency_key: str,
+        failure_code: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                "UPDATE device_execution_claims SET status = 'UNKNOWN_OUTCOME', "
+                "failure_code = ? WHERE idempotency_key = ? "
+                "AND status IN ('WRITE_STARTED', 'UNKNOWN_OUTCOME')",
+                (failure_code, idempotency_key),
+            )
+            if cursor.rowcount != 1:
+                raise DeviceExecutionConflictError(
+                    "DEVICE_EXECUTION_CLAIM_CONFLICT",
+                    "设备执行 claim 无法标记 UNKNOWN_OUTCOME。",
+                )
+
+    def mark_device_execution_reconciliation_required(
+        self,
+        *,
+        idempotency_key: str,
+        failure_code: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                "UPDATE device_execution_claims "
+                "SET status = 'RECONCILIATION_REQUIRED', failure_code = ? "
+                "WHERE idempotency_key = ? AND status IN "
+                "('WRITE_STARTED', 'UNKNOWN_OUTCOME', 'RECONCILIATION_REQUIRED')",
+                (failure_code, idempotency_key),
+            )
+            if cursor.rowcount != 1:
+                raise DeviceExecutionConflictError(
+                    "DEVICE_EXECUTION_CLAIM_CONFLICT",
+                    "设备执行 claim 无法进入 RECONCILIATION_REQUIRED。",
+                )
+
+    def finalize_device_execution(
+        self,
+        receipt: DeviceExecutionReceipt,
+        *,
+        owner_instance_id: str,
+    ) -> DeviceExecutionReceipt:
+        verified = deserialize_device_execution_receipt(
+            json.loads(
+                json.dumps(
+                    asdict(receipt),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+        )
+        payload_json = json.dumps(
+            asdict(verified),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT execution_status, payload_json FROM device_execution_receipts "
+                "WHERE idempotency_key = ?",
+                (verified.idempotency_key,),
+            ).fetchone()
+            if existing is not None:
+                stored = deserialize_device_execution_receipt(
+                    json.loads(existing["payload_json"])
+                )
+                if stored.receipt_hash == verified.receipt_hash:
+                    return stored
+                if existing["execution_status"] not in {
+                    "UNKNOWN_OUTCOME",
+                    "RECONCILIATION_REQUIRED",
+                }:
+                    raise DeviceExecutionConflictError(
+                        "DEVICE_EXECUTION_RECEIPT_CONFLICT",
+                        "设备执行幂等键已绑定其他不可变凭证。",
+                    )
+            claim = connection.execute(
+                "SELECT owner_instance_id, status FROM device_execution_claims "
+                "WHERE device_execution_id = ? AND idempotency_key = ?",
+                (verified.device_execution_id, verified.idempotency_key),
+            ).fetchone()
+            if (
+                claim is None
+                or claim["status"] == "FINALIZED"
+            ):
+                raise DeviceExecutionConflictError(
+                    "DEVICE_EXECUTION_CLAIM_CONFLICT",
+                    "设备执行 claim 不存在、已完成或不属于当前执行器。",
+                )
+            connection.execute(
+                "INSERT INTO device_execution_receipts ("
+                "device_execution_id, task_id, idempotency_key, execution_status, "
+                "receipt_hash, completed_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(device_execution_id) DO UPDATE SET "
+                "execution_status = excluded.execution_status, "
+                "receipt_hash = excluded.receipt_hash, completed_at = excluded.completed_at, "
+                "payload_json = excluded.payload_json",
+                (
+                    verified.device_execution_id,
+                    verified.task_id,
+                    verified.idempotency_key,
+                    verified.execution_status,
+                    verified.receipt_hash,
+                    verified.completed_at,
+                    payload_json,
+                ),
+            )
+            claim_status = (
+                "FINALIZED"
+                if verified.execution_status
+                in {"REJECTED", "FAILED_DEFINITE", "SUCCEEDED"}
+                else verified.execution_status
+            )
+            connection.execute(
+                "UPDATE device_execution_claims SET status = ?, owner_instance_id = ?, "
+                "completed_at = ?, receipt_hash = ? "
+                "WHERE device_execution_id = ?",
+                (
+                    claim_status,
+                    owner_instance_id,
+                    verified.completed_at,
+                    verified.receipt_hash,
+                    verified.device_execution_id,
+                ),
+            )
+        return verified
+
+    def get_device_execution_receipt(
+        self,
+        device_execution_id: str,
+    ) -> DeviceExecutionReceipt | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT payload_json FROM device_execution_receipts "
+                "WHERE device_execution_id = ?",
+                (device_execution_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return deserialize_device_execution_receipt(json.loads(row["payload_json"]))
 
     @staticmethod
     def _deserialize(payload_json: str) -> Task:

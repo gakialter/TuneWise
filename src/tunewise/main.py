@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from .api import create_app
@@ -25,10 +26,16 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
 def create_production_app(repository_root: Path = REPOSITORY_ROOT):
+    database_override = os.environ.get("TUNEWISE_DATABASE_PATH")
+    database_path = (
+        Path(database_override).resolve()
+        if database_override
+        else repository_root / "var" / "tunewise.db"
+    )
     return create_app(
         public_asset_root=repository_root / "assets" / "public",
         expected_manifest_hash=EXPECTED_PUBLIC_MANIFEST_HASH,
-        database_path=repository_root / "var" / "tunewise.db",
+        database_path=database_path,
         static_root=repository_root / "src" / "tunewise" / "static",
         demo_asset_root=repository_root / "assets" / "demo" / "tw-aa-demo-v1",
         expected_dataset_manifest_hash=EXPECTED_DATASET_MANIFEST_HASH,

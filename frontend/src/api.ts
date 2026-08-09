@@ -402,6 +402,89 @@ export type ReplayResponse = {
   replay_result: ReplayResult;
 };
 
+export type DeviceExecutionEligibility = {
+  eligible: boolean;
+  code: string;
+  message: string;
+  execution_mode: string;
+  gateway_version: string;
+  node_mapping_version: string;
+  endpoint_local_id: string;
+  endpoint_fingerprint: string;
+  observed_server_identity_hash: string | null;
+  observed_application_uri: string | null;
+  security_profile: string | null;
+  device_connected: boolean;
+  device_status: string;
+  safety_gate_status: string;
+  replay_status: string | null;
+  parameter_name: string | null;
+  node_id: string | null;
+  expected_before_value: string | null;
+  actual_before_value: string | null;
+  requested_after_value: string | null;
+  tick_delta: number | null;
+  disclaimer: string;
+};
+
+export type DeviceExecutionReceipt = {
+  receipt_version: string;
+  receipt_canonicalizer_version: string;
+  state_machine_version: string;
+  device_execution_id: string;
+  task_id: string;
+  confirmed_plan_id: string;
+  confirmed_plan_hash: string;
+  replay_result_id: string | null;
+  replay_result_hash: string | null;
+  execution_mode: string;
+  gateway_version: string;
+  namespace_uri: string;
+  node_mapping_version: string;
+  endpoint_local_id: string;
+  endpoint_fingerprint: string;
+  observed_server_identity_hash: string | null;
+  observed_application_uri: string | null;
+  security_profile: string | null;
+  certificate_fingerprint: string | null;
+  parameter_name: string | null;
+  node_id: string | null;
+  expected_before_value: string | null;
+  actual_before_value: string | null;
+  requested_after_value: string | null;
+  actual_after_value: string | null;
+  tick_delta: number | null;
+  safety_validator_version: string | null;
+  validation_result: string;
+  execution_status:
+    | "REJECTED"
+    | "FAILED_DEFINITE"
+    | "UNKNOWN_OUTCOME"
+    | "RECONCILIATION_REQUIRED"
+    | "SUCCEEDED";
+  failure_stage: string | null;
+  failure_code: string | null;
+  message: string;
+  device_status: string | null;
+  actor_id: string;
+  actor_role: string;
+  display_name: string;
+  started_at: string;
+  completed_at: string;
+  idempotency_key: string;
+  attempt_count: number;
+  internal_retry_count: number;
+  write_attempt_count: number;
+  state_trace: string[];
+  disclaimer: string;
+  receipt_hash: string;
+};
+
+export type DeviceExecutionResponse = {
+  device_execution: DeviceExecutionReceipt;
+  idempotent_replay: boolean;
+};
+
 export type RuleCheck = {
   rule_id: string;
   status: "PASSED" | "FAILED" | "NOT_EVALUATED";
@@ -665,4 +748,53 @@ export async function runPairedReplay(
     );
   }
   return payload as ReplayResponse;
+}
+
+export async function getDeviceExecutionEligibility(
+  taskId: string,
+  confirmedPlanId: string,
+  confirmedPlanHash: string,
+): Promise<DeviceExecutionEligibility> {
+  const query = new URLSearchParams({
+    confirmed_plan_id: confirmedPlanId,
+    confirmed_plan_hash: confirmedPlanHash,
+  });
+  const response = await fetch(
+    `/api/tasks/${taskId}/device-executions/eligibility?${query.toString()}`,
+  );
+  const payload = (await response.json()) as DeviceExecutionEligibility | ErrorPayload;
+  if (!response.ok) {
+    const error = (payload as ErrorPayload).error;
+    throw new TaskCreationError(
+      error?.code ?? "DEVICE_EXECUTION_ELIGIBILITY_FAILED",
+      error?.message ?? "无法检查本地模拟设备执行资格。",
+    );
+  }
+  return payload as DeviceExecutionEligibility;
+}
+
+export async function executeControlledDeviceWrite(
+  taskId: string,
+  confirmedPlanId: string,
+  confirmedPlanHash: string,
+): Promise<DeviceExecutionResponse> {
+  const response = await fetch(`/api/tasks/${taskId}/device-executions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      confirmed_plan_id: confirmedPlanId,
+      confirmed_plan_hash: confirmedPlanHash,
+      execution_mode: "OPCUA_SANDBOX",
+      sandbox_execution_acknowledged: true,
+    }),
+  });
+  const payload = (await response.json()) as DeviceExecutionResponse | ErrorPayload;
+  if (!response.ok) {
+    const error = (payload as ErrorPayload).error;
+    throw new TaskCreationError(
+      error?.code ?? "DEVICE_EXECUTION_FAILED",
+      error?.message ?? "本地模拟设备受控下发失败。",
+    );
+  }
+  return payload as DeviceExecutionResponse;
 }

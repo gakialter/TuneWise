@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Literal
@@ -9,7 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from .assets import AssetIntegrityError, PublicAssetLoader
 from .case_retrieval import CaseRetrievalAssetError, CaseRetrievalGuardError
@@ -25,6 +26,11 @@ from .parameter_planning import (
 )
 from .plan_confirmation import PlanConfirmationGuardError
 from .replay import ReplayBoundaryAudit, ReplayGuardError
+from .device_execution import (
+    DeviceExecutionConflictError,
+    DeviceExecutionService,
+)
+from .opcua_gateway import DeviceExecutionConfig, OpcUaGateway
 from .service import PlanningBoundaryAudit, TaskService
 from .importing import ImportValidationError
 from .store import TaskStore
@@ -71,6 +77,14 @@ class ReplayRequest(BaseModel):
     request_idempotency_key: str
 
 
+class DeviceExecutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmed_plan_id: str = Field(min_length=1, max_length=128)
+    confirmed_plan_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    execution_mode: Literal["OPCUA_SANDBOX"]
+    sandbox_execution_acknowledged: StrictBool
+
+
 def create_app(
     public_asset_root: Path,
     expected_manifest_hash: str,
@@ -86,12 +100,15 @@ def create_app(
     expected_planning_manifest_hash: str | None = None,
     replay_asset_root: Path | None = None,
     expected_replay_manifest_hash: str | None = None,
+    device_execution_config: DeviceExecutionConfig | None = None,
+    opcua_gateway: OpcUaGateway | None = None,
 ) -> FastAPI:
     boundary_audit = PlanningBoundaryAudit()
     replay_boundary_audit = ReplayBoundaryAudit()
+    store = TaskStore(database_path)
     service = TaskService(
         asset_loader=PublicAssetLoader(public_asset_root, expected_manifest_hash),
-        store=TaskStore(database_path),
+        store=store,
         demo_asset_root=demo_asset_root,
         expected_dataset_manifest_hash=expected_dataset_manifest_hash,
         diagnostic_asset_root=diagnostic_asset_root,
@@ -105,16 +122,34 @@ def create_app(
         expected_replay_manifest_hash=expected_replay_manifest_hash,
         replay_boundary_audit=replay_boundary_audit,
     )
+    execution_config = device_execution_config or DeviceExecutionConfig.from_env()
+    device_execution_service = DeviceExecutionService(
+        config=execution_config,
+        repository=store,
+        qualification_provider=service.qualify_device_execution,
+        gateway=opcua_gateway,
+    )
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        if execution_config.enabled:
+            outcomes = device_execution_service.reconcile_pending()
+            application.state.device_execution_reconciliation_count = len(outcomes)
+        yield
+
     app = FastAPI(
         title="TuneWise MVP",
         version="0.1.0",
         docs_url=None,
         redoc_url=None,
+        lifespan=lifespan,
     )
     app.state.planning_boundary_audit = boundary_audit
     app.state.boundary_counters = boundary_audit.counters
     app.state.replay_boundary_audit = replay_boundary_audit
     app.state.replay_boundary_counters = replay_boundary_audit.counters
+    app.state.device_execution_config = execution_config
+    app.state.device_execution_service = device_execution_service
+    app.state.device_execution_reconciliation_count = 0
 
     @app.exception_handler(AssetIntegrityError)
     async def handle_asset_integrity_error(
@@ -269,6 +304,16 @@ def create_app(
             },
         )
 
+    @app.exception_handler(DeviceExecutionConflictError)
+    async def handle_device_execution_conflict(
+        _request: Request,
+        error: DeviceExecutionConflictError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={"error": {"code": error.code, "message": error.message}},
+        )
+
     @app.exception_handler(RequestValidationError)
     async def handle_request_validation_error(
         request: Request,
@@ -413,6 +458,35 @@ def create_app(
                     }
                 },
             )
+        if request.url.path.endswith("/device-executions"):
+            task_id = request.path_params.get("task_id", "")
+            if not task_id or not service.has_task(task_id):
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": "调机任务不存在。"},
+                )
+            if any(item.get("type") == "extra_forbidden" for item in error.errors()):
+                return JSONResponse(
+                    status_code=422,
+                    content={
+                        "error": {
+                            "code": "DEVICE_EXECUTION_REQUEST_FORBIDDEN_FIELDS",
+                            "message": (
+                                "设备执行请求只能提交 ConfirmedPlan 身份、"
+                                "OPCUA_SANDBOX 模式与独立确认。"
+                            ),
+                        }
+                    },
+                )
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error": {
+                        "code": "DEVICE_EXECUTION_REQUEST_INVALID",
+                        "message": "设备执行请求缺少合法的方案身份、模式或独立确认。",
+                    }
+                },
+            )
         return JSONResponse(
             status_code=422,
             content={"detail": jsonable_encoder(error.errors())},
@@ -518,6 +592,74 @@ def create_app(
         if not service.has_task(task_id):
             raise HTTPException(status_code=404, detail="调机任务不存在。")
         return {"audit_events": [asdict(item) for item in service.get_audit_events(task_id)]}
+
+    @app.get("/api/tasks/{task_id}/device-executions/eligibility")
+    def get_device_execution_eligibility(
+        task_id: str,
+        confirmed_plan_id: str,
+        confirmed_plan_hash: str,
+    ) -> dict:
+        if not service.has_task(task_id):
+            raise HTTPException(status_code=404, detail="调机任务不存在。")
+        return asdict(
+            device_execution_service.eligibility(
+                task_id,
+                confirmed_plan_id,
+                confirmed_plan_hash,
+            )
+        )
+
+    @app.post("/api/tasks/{task_id}/device-executions")
+    def create_device_execution(
+        task_id: str,
+        request: DeviceExecutionRequest,
+    ) -> JSONResponse:
+        if not service.has_task(task_id):
+            raise HTTPException(status_code=404, detail="调机任务不存在。")
+        outcome = device_execution_service.execute(
+            task_id=task_id,
+            confirmed_plan_id=request.confirmed_plan_id,
+            confirmed_plan_hash=request.confirmed_plan_hash,
+            execution_mode=request.execution_mode,
+            sandbox_execution_acknowledged=request.sandbox_execution_acknowledged,
+        )
+        return JSONResponse(
+            status_code=201 if outcome.created else 200,
+            content=jsonable_encoder(
+                {
+                    "device_execution": asdict(outcome.receipt),
+                    "idempotent_replay": outcome.idempotent_replay,
+                }
+            ),
+        )
+
+    @app.get(
+        "/api/tasks/{task_id}/device-executions/{device_execution_id}"
+    )
+    def get_device_execution(
+        task_id: str,
+        device_execution_id: str,
+    ) -> dict:
+        if not service.has_task(task_id):
+            raise HTTPException(status_code=404, detail="调机任务不存在。")
+        receipt = device_execution_service.get_receipt(device_execution_id)
+        if receipt is None or receipt.task_id != task_id:
+            raise HTTPException(status_code=404, detail="设备执行记录不存在。")
+        return {"device_execution": asdict(receipt)}
+
+    @app.get(
+        "/api/tasks/{task_id}/device-executions/{device_execution_id}/receipt"
+    )
+    def get_device_execution_receipt(
+        task_id: str,
+        device_execution_id: str,
+    ) -> dict:
+        if not service.has_task(task_id):
+            raise HTTPException(status_code=404, detail="调机任务不存在。")
+        receipt = device_execution_service.get_receipt(device_execution_id)
+        if receipt is None or receipt.task_id != task_id:
+            raise HTTPException(status_code=404, detail="设备执行凭证不存在。")
+        return {"receipt": asdict(receipt)}
 
     if static_root is not None:
         app.mount("/", StaticFiles(directory=static_root, html=True), name="frontend")

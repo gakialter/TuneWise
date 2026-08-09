@@ -37,7 +37,7 @@ def test_single_process_serves_built_frontend_and_backend_api(tmp_path):
     assert task.json()["status"] == "CREATED"
 
 
-def test_runtime_source_has_no_external_dependency_and_simulator_is_replay_only():
+def test_runtime_source_uses_only_approved_offline_dependencies_and_keeps_gateways_isolated():
     runtime_root = Path(__file__).parents[2] / "src" / "tunewise"
     runtime_files = tuple(runtime_root.rglob("*.py"))
     imported_roots: set[str] = set()
@@ -55,6 +55,10 @@ def test_runtime_source_has_no_external_dependency_and_simulator_is_replay_only(
 
     assert imported_roots <= {
         "__future__",
+        "argparse",
+        "asyncio",
+        "asyncua",
+        "contextlib",
         "csv",
         "dataclasses",
         "datetime",
@@ -64,15 +68,36 @@ def test_runtime_source_has_no_external_dependency_and_simulator_is_replay_only(
         "hashlib",
         "io",
             "json",
-            "math",
-            "pathlib",
+        "math",
+        "os",
+        "pathlib",
         "pydantic",
         "re",
+        "signal",
+        "socket",
         "sqlite3",
         "statistics",
+        "subprocess",
+        "sys",
+            "time",
+            "types",
             "typing",
-            "uuid",
+        "urllib",
+        "uuid",
+        "uvicorn",
         }
+    assert {
+        name for name, imports in relative_imports.items() if "opcua_gateway" in imports
+    } == {"api.py", "device_execution.py", "opcua_sandbox.py"}
+    for protected_module in (
+        "detection.py",
+        "diagnosis.py",
+        "case_retrieval.py",
+        "parameter_planning.py",
+        "plan_confirmation.py",
+    ):
+        assert "opcua_gateway" not in relative_imports[protected_module]
+        assert "device_execution" not in relative_imports[protected_module]
     assert {
         name for name, imports in relative_imports.items() if "simulator_gateway" in imports
     } == {"replay.py"}

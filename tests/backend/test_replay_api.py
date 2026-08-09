@@ -21,7 +21,13 @@ from .asset_fixtures import write_public_assets
 from .test_plan_confirmation_api import _change_measurement_parameter, _prepare_plan_ready
 
 
-def make_replay_client(tmp_path: Path, mutate_replay=None) -> tuple[TestClient, object]:
+def make_replay_client(
+    tmp_path: Path,
+    mutate_replay=None,
+    *,
+    device_execution_config=None,
+    opcua_gateway=None,
+) -> tuple[TestClient, object]:
     public_root = tmp_path / "public"
     public_hash = write_public_assets(public_root)
     demo_root = tmp_path / "demo"
@@ -55,6 +61,8 @@ def make_replay_client(tmp_path: Path, mutate_replay=None) -> tuple[TestClient, 
         expected_planning_manifest_hash=planning_hash,
         replay_asset_root=replay_root,
         expected_replay_manifest_hash=replay_manifest["canonical_manifest_hash"],
+        device_execution_config=device_execution_config,
+        opcua_gateway=opcua_gateway,
     )
     return TestClient(app), app
 
