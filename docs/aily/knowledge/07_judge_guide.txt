@@ -1,0 +1,97 @@
+# TuneWise 比赛评委快速问答指南
+
+## 30 秒项目解释
+
+TuneWise 是面向精密光学 Active Alignment（AA）工站的 Human-in-the-loop AI 调机决策支持原型。AI 分析异常、进行根因排序、检索适用案例并形成参数候选与证据；工程师审核并选择/确认。之后才进入 Simulation Validation (Replay) / 执行前仿真验证和受控 sandbox 执行原型。飞书 Aily 只负责检索和解释这些知识，不进入设备控制链。
+
+## 1 分钟技术解释
+
+底层 TuneWise Deterministic AI Core 使用 50 个固定工程特征、`StandardScaler` 和 multinomial logistic regression 对五类根因排序，再用显式规则和 Z gate 约束解释。结构化 KNN 只检索兼容的 `APPROVED` synthetic development cases；可选 Process Context 可先改变案例资格，再沿用现有 50-D 排序。参数方向来自固定工程规则，幅值来自 1/2 tick 规则或兼容案例动作中位数；所有候选统一经过 Decimal/tick `ParameterSafetyValidator`。工程师确认后形成不可变 `ConfirmedPlan`。Simulation Validation 先要求 baseline canonical hash 完全重现，再比较只有确认参数发生变化的配对模拟。显式本地 OPC-UA sandbox 还演示了只读 Variable、受控 Method、expected-before、幂等和 readback，但不是生产设备接入。
+
+## 两个独立 Demo 证据
+
+Demo A — End-to-End Fixed Demo：`Detect → Diagnose → Recommend → Human Confirm → Simulation Validation → OPC-UA Sandbox Execution`。完整现场路径必须显式使用 `start-tunewise-opcua-demo.cmd`；默认启动只到 Simulation Validation。该 Demo 证明完整受控决策链可以运行，但 Simulation Validation 与 execution receipt 都只属于固定模拟环境。
+
+Demo B — Process-aware Decision Demo：`Same Measurement Evidence + Different Process Context → Different Eligible Historical Evidence → Different CASE_GUIDED`。Scenario A 的 `INITIAL_ASSESSMENT` 选择 `tw-aa-approved-011`，给出 synthetic pitch `-3` ticks；Scenario B 的 `POST_ADJUSTMENT_EVALUATION`、previous pitch `0.250000 → 0.200000` 和 `NO_MATERIAL_IMPROVEMENT` 选择 `tw-aa-approved-003`，给出 synthetic pitch `-4` ticks。两种情景的 Top-3、`CONSERVATIVE -1`、`STANDARD -2` 与 Validator `PASSED` 不变。
+
+两者是独立证据，不应合并成一个虚构的生产调机故事。Demo B 使用 synthetic `ProcessContext` / `CaseProcessProfile` fixtures；状态名称是 TuneWise abstractions，不是行业标准状态或舜宇 SOP，也不证明真实调机准确率。
+
+## 最大技术亮点
+
+最大亮点是“证据链与安全边界一起版本化”：测量、特征、模型、规则、案例、候选、确认、回放和执行凭证都有明确版本/hash；证据缺失、方向冲突、方案过期、内容篡改、身份不匹配或写后状态不确定时，系统拒绝继续或进入 reconciliation，而不是补猜结论。
+
+## 为什么选择可解释 ML
+
+- AA Demo 输入是固定数值特征与有限根因集合，logistic regression 适合稳定排序。
+- 可展示 raw logit、相对 score、显式规则和每项 `feature × coefficient` 贡献。
+- 模型与 Scaler 可冻结、纯 Python 离线推理并复算 hash。
+- 它的责任被限制为根因候选排序，不承担设备控制授权。
+
+模型 score 不是校准后的真实故障概率。
+
+## 双层 AI 架构
+
+- 底层：TuneWise Deterministic AI Core，负责数值分析、结构化检索、候选与安全门禁。
+- 上层：Feishu Aily Generative AI Collaboration Layer，负责 Knowledge Retrieval、工程解释和评委问答。
+
+Aily 不生成参数、不修改 ConfirmedPlan、不触发 Replay 或 OPC-UA。
+
+## 为什么工业安全链不直接使用 LLM
+
+LLM 的开放式生成不适合作为参数方向、幅值、范围、tick、设备状态与原子执行的权威来源。TuneWise 把这些责任留给版本固定的规则、Validator、人工确认和设备侧受控 Method；Aily 只解释已有证据。这样可以清楚地区分“理解与协作”与“控制授权”。
+
+## OPC-UA 安全执行如何实现
+
+设备执行默认关闭，仅能显式启用固定 loopback sandbox。普通 client 看到的五个参数 Variable 永久只读；唯一 mutation 入口是 `ApplyConfirmedParameterChange` Method。执行前验证 ConfirmedPlan freshness、Replay `SUCCESS`、Validator、单参数限制、server identity、mapping、datatype、unit、access 与健康状态。Method 内执行 idempotency lookup、expected-before compare、单参数写入、readback 和设备记录。超时后不自动重写，只做同 key 的只读 reconciliation。
+
+## 当前最重要限制
+
+- 没有真实光学产线、真实设备或真实生产数据。
+- 模型、案例和固定 Demo 来自 synthetic development assets。
+- Simulation Validation `SUCCESS` 不代表真实良率、生产收益或真实因果效果。
+- Process-aware compatibility rules 尚未用真实企业过程数据验证；pitch `-3` / `-4` ticks 只是 synthetic demonstration outputs。
+- OPC-UA 只验证本地匿名 sandbox，不代表真实 PLC 联锁和生产安全认证。
+- 当前只允许单参数设备执行；不做自动回滚。
+- Aily 只解释，不控制。
+
+## 后续真实数据验证路线
+
+1. 获得经授权的真实设备 shadow export 和来源/授权引用。
+2. 由设备与工艺负责人审核列语义、单位换算、设备型号、batch/lot 和 mapping。
+3. 生成 raw/canonical/evidence bundle hashes，固定进入 `SHADOW_READ_ONLY`。
+4. 绑定控制限、SPC、模型、特征、安全规则与 analysis contract。
+5. 先做只读数据质量与声明式 review 分析，不进入训练、案例库或设备写入。
+6. 在独立批准的现场协议、认证、联锁和责任边界完成后，才讨论真实设备集成；当前仓库未到该阶段。
+
+## Aily 带来的实际价值
+
+Aily 把分散在代码、测试、资产和文档中的已核实事实变成自然语言检索入口。当前已发布应用的既有验收绑定 7 文件快照；只有在新增第 8 个 Process-aware addendum 完成外部上传并重新验收后，才可声称 live Aily 能稳定回答“为什么相同根因在不同 synthetic Process Context 下得到不同 `CASE_GUIDED`”。仓库知识文件当前已支持该问答，但不冒充 live app 已同步。Aily 减少解释成本，但不扩大 TuneWise 的控制权限。
+
+## 推荐评委问题
+
+1. TuneWise 是做什么的？
+2. 它和传统依赖工程师经验的调机有什么区别？
+3. TuneWise 使用了什么 AI？
+4. 为什么不用大模型直接调设备？
+5. 当前支持哪些根因？
+6. 模型的 `normalized_score` 是概率吗？
+7. `ParameterSafetyValidator` 是什么，检查哪些边界？
+8. `APPROVED Case` 代表真实生产验证吗？
+9. 固定 Demo 这次检测到了什么异常？
+10. 固定 Demo 的 Top-3 根因是什么？
+11. 为什么这次判断为 `PLANE_TILT`？
+12. 为什么推荐调整 `pitch`，而且方向是负？
+13. 本次已确认候选的幅值是谁决定的？
+14. Conservative、Standard 和 Case-guided 有什么区别？
+15. Simulation Validation 前后哪些指标变化了？
+16. Simulation Validation `SUCCESS` 是否证明真实良率提升？
+17. baseline reproduction 为什么重要？
+18. 当前已经接入真实产线或真实设备了吗？
+19. OPC-UA 写入如何避免超时后的重复执行？
+20. Aily 能直接生成或下发参数吗？
+21. TuneWise 是否会根据调机步骤改变 `CASE_GUIDED`？
+22. Process Context 是否来自舜宇真实产线？
+23. 为什么相同 `PLANE_TILT` 会出现不同 `CASE_GUIDED`？
+24. `NO_MATERIAL_IMPROVEMENT` 是行业标准状态吗？
+25. Process Context 会绕过安全规则吗？
+26. Process-aware Demo 是否证明真实调机更准确？

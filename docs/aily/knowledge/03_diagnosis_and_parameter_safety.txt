@@ -1,0 +1,74 @@
+# 诊断、案例与参数安全
+
+## 决策链
+
+`Anomaly → Root Cause Ranking → Optional Process-context Eligibility → Existing 50-D Case Ranking → Direction Rule → Magnitude Evidence → Candidate → ParameterSafetyValidator`
+
+这条链由 TuneWise Deterministic AI Core 在服务端完成。LLM 和飞书 Aily 不参与荐参计算。
+
+## Anomaly 与 Top-3 根因
+
+只有通过数据完整性和 SPC 路由的目标异常才进入根因诊断。固定 `StandardScaler` 和 multinomial logistic regression 对可见根因生成 `normalized_score`，显式规则和 Z gate 再提供兼容/冲突证据。系统保存有序 Top-3；score 只用于根因之间的相对排序，不是真实故障概率。
+
+## `APPROVED Case` 是什么
+
+`APPROVED Case` 是版本化、只读、已纳入批准索引的离线开发案例。当前 `tw-approved-case-index-v1` 含 60 个 `APPROVED` training cases，每类根因 12 个；来源是 `tw-diagnostic-dev-train-v1` 合成开发分区，不是真实产线专家案例。
+
+检索先校验 AA 工站、产品型号、schema、feature definition 和 retrieval rule 兼容性，再使用固定 scaler 的标准化欧氏距离做 KNN。根因标签、历史动作和历史模拟结果不进入距离计算。`VALIDATION`、`TEST`、`BLIND_TEST`、`DEMO`、`PENDING_REVIEW` 和 `RUNTIME_SUBMISSION` 分区不能进入索引。
+
+`APPROVED` 表示通过项目内版本化索引准入，不表示生产验证、真实设备验证或参数最优。
+
+## Process Context 如何影响案例
+
+TuneWise 可以在当前异常与根因证据之外引入可选 Process Context：当前评估阶段、前一步执行的参数动作、前一步结果和迭代信息。系统先用确定性 compatibility rules 判断 `APPROVED` 案例是否具备作为当前 `CASE_GUIDED` 证据的资格，再对有资格的案例沿用现有 50-D 标准化欧氏距离排序。
+
+Process Context 不进入 `StandardScaler` 或现有 multinomial logistic regression，不改变 Engineering Feature Contract、根因 labels、Top-3 或 50-D distance definition，也不直接计算参数值。它只可能通过 eligible case 集合间接改变 `CASE_GUIDED` 是否可用、支持案例 ID、案例引导幅值与解释；`CONSERVATIVE`、`STANDARD`、方向规则和 `ParameterSafetyValidator` 不变。
+
+当前 `ProcessContext` 和 `CaseProcessProfile` 都是 synthetic fixtures。`INITIAL_ASSESSMENT`、`POST_ADJUSTMENT_EVALUATION`、`NO_MATERIAL_IMPROVEMENT` 等是 TuneWise 为 deterministic demonstration 定义的抽象，不是行业标准状态，不代表舜宇内部 SOP；compatibility rules 尚未经过真实企业过程数据验证。该功能不证明真实 AA 推荐准确率、真实良率提升、production tuning effectiveness、causal effectiveness 或 sequential optimization。
+
+## 参数方向从哪里来
+
+方向来自 `tw-direction-rules-v1`，不是来自 LLM，也不是由案例投票决定。每个参数都要绑定当前值、标称值、支持特征、规则 ID、冲突状态和 evidence hash。
+
+当前规则包括：
+
+- `PLANE_TILT` 的 `pitch` 使用 `top_bottom_difference`，规则 `PLANE_TILT_PITCH_SAME_SIGN`。
+- `PLANE_TILT` 的 `roll` 使用 `left_right_difference`，规则 `PLANE_TILT_ROLL_OPPOSITE_SIGN`。
+- `XY_DECENTER` 的 `x_offset` 使用 `left_right_difference`，同号关系。
+- `XY_DECENTER` 的 `y_offset` 使用 `top_bottom_difference`，反号关系。
+- `Z_DEFOCUS_CONDITIONAL` 还必须通过 Z gate 和全局低 MTF 模式。
+
+空间特征的绝对值至少为 `0.040000` 才提供该轴的方向支持。缺失、当前值无法落在 tick 网格或方向冲突的参数不会进入可用候选。
+
+## 参数幅值从哪里来
+
+当前三种候选类型都真实存在：
+
+- `CONSERVATIVE`：`tw-parameter-planning-v1` 固定为 1 tick。
+- `STANDARD`：同一规则固定为 2 ticks。
+- `CASE_GUIDED`：对兼容 `APPROVED` cases 中方向一致且历史安全通过的动作 tick 绝对值取中位数，偶数个值采用 half-up rounding。
+
+一个 tick 是 `0.050000` normalized prototype unit。生成器还会受当前值到标称值的距离与 `maximum_single_plan_delta` 限制，不会跨过标称值。固定 Demo 的已确认候选是 `CONSERVATIVE`，因此幅值来自规则的 1 tick，不是来自案例，也不是模型或 Aily 生成。
+
+## 参数候选类型与数量
+
+候选 `ParameterPlanCandidate` 保存 generation type/sources、根因、参数族、完整 current/proposed values、Decimal delta、integer tick delta、方向证据、支持案例、版本、检查结果和 candidate hash。
+
+规划安全策略允许同一参数族内最多 2 个调整参数；当前固定 Demo 实际生成的三个候选均只改变 `pitch`。本地 OPC-UA DeviceExecution 另有更严格门禁：只允许恰好一个实际变化参数。当前不支持多参数同时设备执行。
+
+## `ParameterSafetyValidator` 检查什么
+
+`ParameterSafetyValidator` 是所有候选共用的确定性安全验证器，当前版本 `tw-parameter-safety-v1`。它至少检查：
+
+- 参数集合必须与授权约束快照一致，数值可无损转为固定精度 `Decimal`。
+- 当前值与目标值都在范围内，并落在相对标称值的合法 tick 网格。
+- 至少一个非零变化，调整参数数不超过策略上限。
+- 所有变化属于单一参数族，且该参数族允许用于当前 Top-1 根因。
+- 每个变化都有无冲突且 hash/版本一致的方向证据，delta 方向与证据一致。
+- 调整缩小到标称值的偏差，不跨越标称值。
+- 单次变化不超过参数自己的 `maximum_single_plan_delta`。
+- tick、Decimal delta、版本绑定和 candidate hash 全部一致。
+
+固定参数约束快照 `tw-parameter-constraints-v1` 中，五个参数范围均为 `[-1.000000, 1.000000]`、step 均为 `0.050000`、标称值均为 `0.000000`；`pitch`、`roll`、`x_offset`、`y_offset` 的单方案最大变化为 `0.200000`，`z_offset` 为 `0.100000`。
+
+案例引导候选也必须通过同一个 Validator。Aily 不能绕过 Validator，也不能生成、修改或提交任何候选。

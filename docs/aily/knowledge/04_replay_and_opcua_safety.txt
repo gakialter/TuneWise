@@ -1,0 +1,67 @@
+# ConfirmedPlan、Simulation Validation (Replay) 与 OPC-UA 安全
+
+## `ConfirmedPlan`
+
+`ConfirmedPlan` 是工程师对服务端现有候选进行人工确认后形成的冻结领域对象，当前版本 `tw-confirmed-plan-v1`。浏览器只提交 candidate ID 和 candidate hash，不能覆盖 current/proposed values、delta、规则版本或确认人身份。
+
+ConfirmedPlan 绑定 task、planning result、candidate、当前参数、输入测量、检测/诊断/案例结果、控制限、参数约束、规则、模型、Scaler、资产 hash、确认人和确认时间。其 dataclass 与内部 mapping 都不可变，并有 `confirmed_plan_hash`。
+
+`tw-confirmed-plan-freshness-v1` 会在后续动作前检查数据、当前参数、检测、诊断、检索、规划、候选、控制限、参数约束、规则、模型、预处理和资产 hash。任一绑定变化会使方案 `STALE`，不能进入 Replay 或设备执行。
+
+## Simulation Validation (Replay) / 执行前仿真验证
+
+工程师确认参数候选后，Simulation Validation 在固定 simulator、seed、disturbance 和 evaluation contract 下先复现 baseline，再运行参数方案并判断是否满足预设评价规则。内部工程术语、领域对象与 API 继续使用 Replay、`ReplayResult`、`/replays` 和 Replay Engine。
+
+Replay 只接受服务端保存且仍为 `VALID` 的 ConfirmedPlan。`SimulatorGateway` 只由 Replay 边界调用；诊断、案例检索和荐参不能访问隐藏场景，也不能通过试算搜索参数。
+
+Replay 先运行 baseline reproduction：用相同 simulator、固定 seed、固定扰动和当前参数重建 24 条 baseline observable measurements，再使用 `tw-canonicalizer-v1` 计算 hash。只有 simulated baseline hash 与导入时 canonical observation hash 完全相同，才运行 intervention。失败时不创建 ReplayResult。
+
+通过后，baseline 与 intervention 共享隐藏场景、扰动、seed、样本数、时间序列、schema 和 simulator version，唯一允许变化的是 ConfirmedPlan 中的参数。`ReplayResult` 是不可变、带 hash 的结构化结果，状态之一为 `SUCCESS`、`PARTIAL_IMPROVEMENT`、`NO_IMPROVEMENT` 或 `REGRESSION`。
+
+**Replay result does not demonstrate production yield improvement.** Simulation Validation `SUCCESS` 只表示固定版本规则约束模拟环境中的评价检查满足 `tw-evaluation-v1`；它不证明真实设备效果、真实因果关系、真实产线良率、生产收益或参数最优性。
+
+## OPC-UA sandbox 的真实状态
+
+设备执行默认关闭。只有显式启用 `OPCUA_SANDBOX` 和 `OPCUA_SANDBOX_DEMO` profile 时，TuneWise 才连接固定 loopback endpoint：`opc.tcp://127.0.0.1:4841/tunewise/opcua-sandbox/`。
+
+当前 server security profile 是 `LOCAL_ANONYMOUS_SANDBOX`。它是无凭据、本机匿名 sandbox；当前证据中的 `certificate_fingerprint` 为 `null`。这不是生产证书、安全会话或真实 OT 环境。endpoint 不能改成公网、非 loopback 或带凭据地址。
+
+Gateway 会观察并验证 application URI、namespace URI、mapping version、node ID、datatype、unit、AccessLevel/UserAccessLevel、Method identity/capability 和设备健康状态。身份或元数据不匹配时 fail closed。
+
+## Variable 只读与受控 Method
+
+五个参数 Variable 对普通 OPC-UA client 始终只读：允许 `CurrentRead`，不允许 `CurrentWrite`。普通 client write 会被协议 access level 拒绝，并且不产生 execution record 或 receipt。
+
+唯一运行期参数 mutation 入口是 sandbox 的 `ApplyConfirmedParameterChange` Method，版本 `tw-opcua-atomic-method-v2`。它在 sandbox 的单一 execution lock 内执行：
+
+1. 查询同一 idempotency key 是否已有设备记录。
+2. 读取并规范化权威当前值。
+3. 比较 `expected_before`；不相等时拒绝且物理写入次数为 0。
+4. 校验目标值与 mapping。
+5. 在服务端内部写入单一参数。
+6. 回读并比较目标值。
+7. 创建幂等设备执行记录。
+
+OPC-UA 协议本身不天然提供 compare-and-set。上述原子语义只由 TuneWise 本地 sandbox Method 实现，不代表真实 PLC 原子写或真实安全联锁。缺少该 Method 时禁止回退到普通 Variable write。
+
+## 设备执行门禁
+
+设备执行要求：额外人工 acknowledgement、ConfirmedPlan 存在且 hash/时效/freshness 有效、ReplayResult 与方案绑定、baseline reproduction 为 `PASSED`、Replay 为 `SUCCESS`、写前重新运行 `ParameterSafetyValidator`、白名单参数与参数族匹配、恰好一个实际变化参数、server identity 和 Method capability 通过、设备健康、实际当前值等于 expected before。
+
+默认 ConfirmedPlan 设备执行有效期为 1800 秒，配置可缩短或调整但不能超过 86400 秒。系统不实现多节点原子性、不执行部分写入、不声明自动回滚。
+
+## idempotency、readback 与 execution receipt
+
+设备幂等 key 绑定 task、plan ID/hash、ReplayResult hash、mode、gateway、namespace、mapping、endpoint fingerprint 和 observed server identity。相同 key 返回首个设备记录，不产生第二次物理写入；不同 key 必须重新比较 expected before。
+
+成功写入后必须 readback 等于目标值，才能形成 `SUCCEEDED`。`DeviceExecutionReceipt` 是带 hash 的不可变凭证，记录身份、节点、期望/实际前后值、tick delta、Validator 版本、状态轨迹、失败阶段、幂等 key、attempt/retry/write count 和时间。
+
+## `UNKNOWN_OUTCOME` 与 reconciliation
+
+`UNKNOWN_OUTCOME` 表示写入已经开始，但因超时、通信中断或本地 receipt 首次持久化失败，系统不能确定设备是否已经应用。它不等于 `FAILED_DEFINITE`，也不等于 `SUCCEEDED`。
+
+`UNKNOWN_OUTCOME ≠ FAILED ≠ 自动重试`。
+
+系统不会因为网络超时而自动再次写入。恢复流程只按同一 idempotency key 查询设备侧记录，即只读 reconciliation。若设备记录证明已应用且绑定一致，可以恢复明确结果；若缺少 execution evidence、记录不兼容或身份无法确认，则进入/保持 `RECONCILIATION_REQUIRED`。
+
+即使只读观察到 current value 等于 target，只要没有可信的设备 execution evidence，也不能猜测 `SUCCEEDED`，因为相同数值可能来自其他执行者或外部变化。
