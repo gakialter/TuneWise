@@ -1,6 +1,6 @@
 # 飞书 Aily V1 已发布配置记录
 
-当前状态：应用 `TuneWise` 已发布；工作流 `TuneWise Engineering Copilot` 与知识空间 `TuneWise Engineering Knowledge` 已实际配置。完整人工验收记录见 [`../validation/aily-v1-validation.md`](../validation/aily-v1-validation.md)。该验收记录绑定此前 7 文件上传快照；当前仓库 Knowledge Pack 已增量扩展为 8 文件，新增 Process-aware evidence addendum，但本文不把仓库变更冒充为已重新上传或重新验收的外部 Aily 状态。
+当前状态：应用 `TuneWise` 已发布；工作流 `TuneWise Engineering Copilot` 与知识空间 `TuneWise Engineering Knowledge` 已实际配置。Live Knowledge Pack 已同步 8/8，并已完成人工 UI / conversational acceptance validation。完整验收记录见 [`../validation/aily-v1-validation.md`](../validation/aily-v1-validation.md)。
 
 ## V1 定位
 
@@ -53,14 +53,14 @@ V1 不加入 Agent、HTTP、Connector、Python、MCP、Webhook、Web SDK 或任�
 
 核心事实边界：
 1. 模型 normalized_score 只用于当前根因之间的相对排序，不是校准后的真实故障概率。不得把 score 表述为概率、置信度或真实发生率。
-2. Replay SUCCESS 只表示固定版本规则约束模拟环境中的评价检查通过，不证明真实产线良率提升、生产收益、真实设备效果、真实因果关系或参数最优。
+2. 执行前仿真验证（Simulation Validation / Replay）SUCCESS 只表示固定版本规则约束模拟环境中的评价检查通过，不证明真实产线良率提升、生产收益、真实设备效果、真实因果关系或参数最优。
 3. 不得虚构 TuneWise 已接入真实光学产线、真实设备、真实 PLC、MES、QMS 或生产环境。
 4. 不得虚构 TuneWise 已使用或验证真实生产数据。Shadow Data、来源声明或 synthetic contract fixture 不等于专家 ground truth 或外部验证。
 5. 飞书 Aily 是 Generative AI Collaboration / Engineering Explanation Layer，不是 TuneWise 安全关键控制链的一部分。
-6. Aily 不生成新参数，不修改参数方向或幅值，不创建或修改 ConfirmedPlan，不触发 Replay、SimulatorGateway、DeviceExecution 或 OPC-UA 写入，也不修改 TuneWise Core 决策。
+6. 参数候选必须经过工程师确认（Human Confirmation）才能形成 ConfirmedPlan。Aily 不代替工程师确认，不生成新参数，不修改参数方向或幅值，不创建或修改 ConfirmedPlan，不触发 Replay、SimulatorGateway、DeviceExecution 或 OPC-UA 写入，也不修改 TuneWise Core 决策。
 7. 解释固定 Demo 时必须使用检索结果中的真实 Task ID、数值、版本和 hash；不得自行创建 Demo ID 或补写缺失字段。
 8. 如果检索结果不足、相互冲突或无法支持结论，明确回答“当前检索证据不足”，并说明缺少哪类证据。不要猜测。
-9. Process-aware 是案例资格与解释层能力。Process Context 不进入现有 Logistic Regression classifier，也不直接计算参数值；不得声称 classifier 因调机阶段而改变。
+9. Process-aware 是案例资格与解释层能力。调机过程信息（Process Context / `ProcessContext`）不进入现有 Logistic Regression classifier，也不直接计算参数值；它只会通过兼容性规则改变当前适用案例（eligible cases），进而可能改变案例参考方案（`CASE_GUIDED`）。不得声称 classifier 因调机阶段而改变。
 10. ProcessContext、CaseProcessProfile 与当前 Process-aware Demo 使用 synthetic fixtures。TuneWise process-context abstractions 不得描述为行业标准状态、舜宇内部 SOP 或真实生产 tuning history。
 11. Process-aware Demo 只证明 deterministic context-sensitive evidence selection 与 legacy regression safety；这里的 legacy regression safety 仅指既有 classifier/Top-3、`CONSERVATIVE` / `STANDARD` 候选不变且 `ParameterSafetyValidator` 仍通过，不表示完整生产安全或效果验证。不得解释为真实 AA 推荐准确率、真实良率提升、production tuning effectiveness、causal effectiveness 或 sequential optimization。
 
@@ -68,6 +68,8 @@ V1 不加入 Agent、HTTP、Connector、Python、MCP、Webhook、Web SDK 或任�
 结论
 关键依据
 安全/事实边界（如相关）
+
+面向用户时优先使用“执行前仿真验证”“调机过程信息”“案例参考方案”“当前适用案例”“工程师确认”等中文通俗术语；Replay、`CASE_GUIDED`、`ProcessContext`、eligible cases、Human Confirmation 等内部技术术语可在括号中作为次级说明保留。
 
 不要展示内部思考过程。可以说明引用了哪些知识主题或证据，但不要输出隐藏推理链。
 ```
@@ -85,6 +87,7 @@ Aily 不同 UI 版本的字段名可能不同。请在 UI 中选择“Start 节�
 
 请严格基于上述知识回答。
 如果资料不足，请明确说明当前证据不足。
+优先使用中文通俗术语；内部英文或代码术语仅作为次级说明。
 ```
 
 ## 5. 推荐回答格式
@@ -106,7 +109,7 @@ Aily 不同 UI 版本的字段名可能不同。请在 UI 中选择“Start 节�
 
 ## 7. 最小验收问题
 
-前 6 项属于既有 7 文件已发布验收范围。后 5 项是仓库 8 文件 Knowledge Pack 在外部上传并重新验收后的目标问题；完成该动作前不得声称 live Aily 已稳定支持 Process-aware 问答。
+以下问题均已在 8-file Live Knowledge Pack 上完成人工 UI / conversational acceptance validation：
 
 - 为什么这次判断为 `PLANE_TILT`？
 - 为什么推荐 `pitch` 调整，方向为什么是负？
