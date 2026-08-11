@@ -36,6 +36,36 @@ const versionLabels: Record<keyof Task["versions"], string> = {
   canonicalizer_version: "规范化器",
 };
 
+const workflowStageLabels: Record<string, string> = {
+  CREATED: "任务创建",
+  DATA_IMPORTED: "输入测量数据",
+  ANOMALY_DETECTED: "异常检测结果",
+  DIAGNOSED: "根因优先级",
+  PLAN_READY: "调参候选方案",
+  PLAN_CONFIRMED: "工程师确认",
+  REPLAYING: "调参方案仿真",
+  REPLAYED: "仿真验证结果",
+  CLOSED: "复盘关闭",
+  CASE_SUBMITTED: "案例提交",
+};
+
+function workflowStageLabel(code: string, fallback: string) {
+  return workflowStageLabels[code] ?? fallback;
+}
+
+const taskStatusLabels: Record<string, string> = {
+  CREATED: "等待输入测量数据",
+  DATA_IMPORTED: "测量数据已导入",
+  ANOMALY_DETECTED: "已发现异常",
+  DIAGNOSED: "根因优先级已生成",
+  PLAN_READY: "调参候选待确认",
+  PLAN_CONFIRMED: "工程师已确认",
+  REPLAYING: "仿真验证进行中",
+  REPLAYED: "仿真验证已完成",
+  CLOSED: "任务已复盘关闭",
+  CASE_SUBMITTED: "案例已提交",
+};
+
 type LoadState =
   | { kind: "loading" }
   | { kind: "ready"; task: Task }
@@ -154,10 +184,34 @@ const ruleLabels: Record<string, string> = {
 const parameterLabels: Record<string, string> = {
   x_offset: "X 偏移",
   y_offset: "Y 偏移",
-  pitch: "Pitch",
-  roll: "Roll",
+  pitch: "pitch（俯仰角）",
+  roll: "roll（横滚角）",
   z_offset: "Z 偏移",
 };
+
+const candidateTypeLabels: Record<string, string> = {
+  CONSERVATIVE: "保守调整方案",
+  STANDARD: "标准调整方案",
+  CASE_GUIDED: "案例参考方案",
+};
+
+function candidateTypeLabel(value: string): string {
+  return candidateTypeLabels[value] ?? value;
+}
+
+function validationStatusLabel(value: string): string {
+  return value === "PASSED" ? "安全校验通过" : value;
+}
+
+function replayStatusLabel(value: ReplayResult["replay_status"]): string {
+  const labels: Record<ReplayResult["replay_status"], string> = {
+    SUCCESS: "仿真验证通过",
+    PARTIAL_IMPROVEMENT: "仿真显示部分改善",
+    NO_IMPROVEMENT: "仿真未显示改善",
+    REGRESSION: "仿真显示指标退化",
+  };
+  return labels[value];
+}
 
 const platformLabels: Record<string, string> = {
   vibration_rms: "振动 RMS",
@@ -204,14 +258,16 @@ function DetectionResultView({
     <div className={`detection-result detection-${copy.tone}`}>
       <div className="detection-result-heading">
         <div>
-          <span className="result-code">{detection.anomaly_result}</span>
+          <span className="result-code">异常检测结果</span>
           <h3>{copy.title}</h3>
           <p>{copy.summary}</p>
         </div>
-        <div className="detection-binding" aria-label="检测版本与输入哈希">
+        <details className="detection-binding technical-details" aria-label="检测版本与输入哈希">
+          <summary>技术证据</summary>
+          <code>内部状态 {detection.anomaly_result}</code>
           <code>规则集 {detection.rule_set_version}</code>
           <code>输入 {detection.input_hash.slice(0, 12)}</code>
-        </div>
+        </details>
       </div>
 
       {protectedResult && (
@@ -302,7 +358,7 @@ function DiagnosisResultView({ diagnostic }: { diagnostic: DiagnosticResult }) {
     <div className="diagnosis-result">
       <div className={`evidence-banner ${sufficient ? "evidence-sufficient" : "evidence-insufficient"}`} role="status">
         <div>
-          <span className="result-code">{diagnostic.evidence_status}</span>
+          <span className="result-code">{sufficient ? "证据充足" : "证据不足"}</span>
           <h3>{sufficient ? "诊断证据满足冻结规则" : "诊断证据不足，仅供排查"}</h3>
           <p>
             {sufficient
@@ -310,15 +366,15 @@ function DiagnosisResultView({ diagnostic }: { diagnostic: DiagnosticResult }) {
               : "仍展示 Top-3 排查顺序；参数候选数量固定为 0，后续流程保持关闭。"}
           </p>
         </div>
-        <code title={diagnostic.result_hash}>业务结果 {diagnostic.result_hash.slice(0, 12)}</code>
+        <code title={diagnostic.result_hash}>{diagnostic.evidence_status}</code>
       </div>
 
       <div className="diagnosis-heading">
         <div>
-          <p className="section-kicker">固定模型 · 结构化解释</p>
-          <h2>Top-3 根因排查顺序</h2>
+          <p className="section-kicker">异常诊断结果</p>
+          <h2>根因优先级</h2>
         </div>
-        <p>相对分数用于当前五类候选排序，不表示真实故障概率。</p>
+        <p><strong>相对排序分数，不代表故障概率。</strong></p>
       </div>
 
       <ol className="root-cause-list">
@@ -327,15 +383,15 @@ function DiagnosisResultView({ diagnostic }: { diagnostic: DiagnosticResult }) {
             <header>
               <span className="root-cause-rank">#{candidate.rank}</span>
               <div>
-                <strong>{candidate.root_cause}</strong>
-                <small>{rootCauseLabels[candidate.root_cause] ?? candidate.root_cause}</small>
+                <strong>{rootCauseLabels[candidate.root_cause] ?? candidate.root_cause}</strong>
+                <small>{candidate.root_cause}</small>
               </div>
               <span className={`adjustability ${candidate.adjustability === "ADJUSTABLE" ? "adjustable" : "inspection-only"}`}>
                 {candidate.adjustability === "ADJUSTABLE" ? "可调" : "仅排查"}
               </span>
               <div className="relative-score">
-                <span>相对分数</span>
-                <strong>{(Number(candidate.normalized_score) * 100).toFixed(2)}%</strong>
+                <span>相对排序分数</span>
+                <strong>{candidate.normalized_score}</strong>
                 <small>logit {candidate.raw_logit}</small>
               </div>
             </header>
@@ -377,7 +433,13 @@ function DiagnosisResultView({ diagnostic }: { diagnostic: DiagnosticResult }) {
         ))}
       </ol>
 
-      <div className="diagnosis-footer-grid">
+      <p className="score-boundary" role="note">
+        例如 0.997781 是当前候选类别的相对排序分数，不代表 99.7781% 故障概率。
+      </p>
+
+      <details className="technical-details">
+        <summary>查看诊断技术证据</summary>
+        <div className="diagnosis-footer-grid">
         <section>
           <h4>Z 类硬门控</h4>
           <strong>{diagnostic.z_gate_result.status}</strong>
@@ -405,7 +467,11 @@ function DiagnosisResultView({ diagnostic }: { diagnostic: DiagnosticResult }) {
             ))}
           </ul>
         </section>
-      </div>
+        </div>
+        <p className="technical-hash" title={diagnostic.result_hash}>
+          诊断结果哈希：{diagnostic.result_hash}
+        </p>
+      </details>
     </div>
   );
 }
@@ -416,19 +482,15 @@ function CaseRetrievalResultView({ result }: { result: CaseRetrievalResult }) {
     <div className="case-retrieval-result">
       <div className={`case-retrieval-status ${empty ? "case-retrieval-empty" : ""}`} role="status">
         <div>
-          <span className="result-code">{result.retrieval_status}</span>
+          <span className="result-code">{empty ? "无当前适用案例" : "历史参考案例"}</span>
           <strong>
             {empty
-              ? "暂无兼容已审核案例"
-              : `已返回 ${result.returned_count} 个兼容已审核案例`}
+              ? "暂无符合当前条件的已审核案例"
+              : `找到 ${result.returned_count} 个当前可参考的已审核案例`}
           </strong>
           {result.shortfall_message && <p>{result.shortfall_message}</p>}
         </div>
-        <dl aria-label="案例检索版本">
-          <div><dt>案例索引</dt><dd>{result.case_index_version}</dd></div>
-          <div><dt>检索标准化器</dt><dd>{result.scaler_version}</dd></div>
-          <div><dt>兼容规则</dt><dd>{result.compatibility_rule_version}</dd></div>
-        </dl>
+        <code>{result.retrieval_status}</code>
       </div>
 
       {!empty && (
@@ -445,10 +507,10 @@ function CaseRetrievalResultView({ result }: { result: CaseRetrievalResult }) {
                   <strong>{approvedCase.case_id}</strong>
                   <small>{approvedCase.product_model}</small>
                 </div>
-                <span className="approved-badge">APPROVED</span>
+                <span className="approved-badge">已审核</span>
                 <div className="case-distance">
-                  <strong>距离 {approvedCase.distance}</strong>
-                  <small>中性显示值 {approvedCase.similarity_display_value}</small>
+                  <strong>特征差异距离 {approvedCase.distance}</strong>
+                  <small>距离越小，可观测特征越接近</small>
                 </div>
               </header>
 
@@ -464,12 +526,6 @@ function CaseRetrievalResultView({ result }: { result: CaseRetrievalResult }) {
                       ? "Top-3 根因池"
                       : "兼容补足池"}
                   </strong>
-                </div>
-                <div>
-                  <span>案例内容哈希</span>
-                  <code title={approvedCase.case_content_hash}>
-                    {approvedCase.case_content_hash.slice(0, 12)}
-                  </code>
                 </div>
               </div>
 
@@ -517,15 +573,30 @@ function CaseRetrievalResultView({ result }: { result: CaseRetrievalResult }) {
                   </dl>
                 </section>
               </div>
+              <details className="technical-details compact-technical-details">
+                <summary>查看案例技术证据</summary>
+                <dl className="case-source-versions">
+                  <div><dt>案例内容哈希</dt><dd title={approvedCase.case_content_hash}>{approvedCase.case_content_hash}</dd></div>
+                  <div><dt>中性显示值</dt><dd>{approvedCase.similarity_display_value}</dd></div>
+                </dl>
+              </details>
             </li>
           ))}
         </ol>
       )}
 
       <p className="case-retrieval-disclaimer" role="note">
-        距离仅衡量固定可观测批次特征的结构化接近程度，不表示根因真实性、因果关系或真实设备适用概率。
-        历史结果仅指规则约束模拟环境中的离线回放，不代表真实产线良率改善。
+        特征差异距离只衡量固定可观测数据的接近程度，不代表根因概率、因果关系或真实设备适用率。
+        历史结果仅来自规则约束模拟环境，不代表真实产线良率改善。
       </p>
+      <details className="technical-details retrieval-technical-details">
+        <summary>查看检索版本与规则</summary>
+        <dl className="case-source-versions" aria-label="案例检索版本">
+          <div><dt>案例索引</dt><dd>{result.case_index_version}</dd></div>
+          <div><dt>检索标准化器</dt><dd>{result.scaler_version}</dd></div>
+          <div><dt>适用性规则</dt><dd>{result.compatibility_rule_version}</dd></div>
+        </dl>
+      </details>
     </div>
   );
 }
@@ -564,8 +635,9 @@ function ParameterPlanningResultView({
         role="status"
       >
         <div>
-          <span>规划状态</span>
-          <strong>{result.planning_status}</strong>
+          <span>调参方案状态</span>
+          <strong>{result.planning_status === "CANDIDATES_AVAILABLE" ? "候选方案已生成" : "未生成调参候选"}</strong>
+          <code>{result.planning_status}</code>
           {result.refusal_message && <p>{result.refusal_message}</p>}
         </div>
         {result.refusal_code && <code>{result.refusal_code}</code>}
@@ -616,9 +688,10 @@ function ParameterPlanningResultView({
 
       {result.ordered_candidates.length > 0 && (
         <section className="planning-candidates" aria-labelledby="planning-candidates-title">
-          <h3 id="planning-candidates-title">通过当前证据和安全规则生成的候选方案</h3>
+          <h3 id="planning-candidates-title">调参候选方案</h3>
           <p className="planning-readonly-note">
-            候选参数为服务端只读内容；请选择一组 PASSED 候选进行人工确认。
+            <strong>AI 给出候选，工程师决定是否采用。</strong>
+            候选参数为服务端只读内容，不会在未确认时写入任何设备。
           </p>
           <ol className="planning-candidate-list">
             {result.ordered_candidates.map((candidate, index) => {
@@ -632,11 +705,11 @@ function ParameterPlanningResultView({
                   <header>
                     <span className="candidate-order">{String(index + 1).padStart(2, "0")}</span>
                     <div>
-                      <strong>{candidate.generation_type}</strong>
-                      <small>{candidate.candidate_id}</small>
+                      <strong>{candidateTypeLabel(candidate.generation_type)}</strong>
+                      <small><code>{candidate.generation_type}</code><span>{candidate.candidate_id}</span></small>
                     </div>
-                    <span>{candidate.total_absolute_delta_ticks} total ticks</span>
-                    <span>支持案例 {candidate.supporting_case_count}</span>
+                    <span>总调整量 {candidate.total_absolute_delta_ticks} ticks</span>
+                    <span>参考案例 {candidate.supporting_case_count}</span>
                   </header>
 
                   {!confirmedPlan && (
@@ -657,7 +730,7 @@ function ParameterPlanningResultView({
                       <span>
                         {invalidCandidateIds.has(candidate.candidate_id)
                           ? "该候选已失效"
-                          : `选择 ${candidate.generation_type} 候选`}
+                          : `选择${candidateTypeLabel(candidate.generation_type)}`}
                       </span>
                     </label>
                   )}
@@ -695,7 +768,7 @@ function ParameterPlanningResultView({
                   )}
 
                   <details className="validation-details">
-                    <summary>逐项安全校验 · {candidate.validation_status}</summary>
+                    <summary>安全校验详情 · {validationStatusLabel(candidate.validation_status)}</summary>
                     <ul>
                       {candidate.validation_checks.map((check) => (
                         <li key={check.check_code}>
@@ -706,9 +779,12 @@ function ParameterPlanningResultView({
                       ))}
                     </ul>
                   </details>
-                  <p className="candidate-hash" title={candidate.candidate_hash}>
-                    候选哈希 {candidate.candidate_hash.slice(0, 16)}
-                  </p>
+                  <details className="technical-details compact-technical-details">
+                    <summary>查看候选方案技术证据</summary>
+                    <p className="candidate-hash" title={candidate.candidate_hash}>
+                      候选哈希 {candidate.candidate_hash}
+                    </p>
+                  </details>
                 </li>
               );
             })}
@@ -721,17 +797,17 @@ function ParameterPlanningResultView({
               aria-live="polite"
             >
               <div>
-                <p className="section-kicker">固定身份 · 显式人工动作</p>
-                <h3 id="confirmation-title">人工确认候选方案</h3>
+                <p className="section-kicker">人在回路 · 工程师做决定</p>
+                <h3 id="confirmation-title">工程师确认</h3>
                 <p>
-                  确认身份：{actor.display_name} · {actor.actor_role}
+                  AI 只提供候选；由 {actor.display_name} 确认是否采用。
                 </p>
                 {selectedCandidateId ? (
                   <p className="confirmation-selection-summary">
                     已选择 {selectedCandidateId}
                   </p>
                 ) : (
-                  <p className="confirmation-selection-summary">请先选择一组 PASSED 候选。</p>
+                  <p className="confirmation-selection-summary">请先选择一组已通过安全校验的候选方案。</p>
                 )}
               </div>
               <button
@@ -744,7 +820,7 @@ function ParameterPlanningResultView({
                 }
                 onClick={onConfirm}
               >
-                人工确认候选方案
+                工程师确认采用
               </button>
               {confirmationState.kind === "loading" && (
                 <div className="confirmation-progress" role="status">
@@ -755,7 +831,7 @@ function ParameterPlanningResultView({
               {confirmationState.kind === "error" && (
                 <div className="inline-error confirmation-error" role="alert">
                   <div>
-                    <strong>人工确认已拒绝</strong>
+                    <strong>工程师确认未通过</strong>
                     <p>{confirmationState.message}</p>
                   </div>
                   <code>{confirmationState.code}</code>
@@ -774,7 +850,7 @@ function ParameterPlanningResultView({
         >
           {confirmedPlan.status === "STALE" ? (
             <>
-              <p className="section-kicker">STALE · 不可用于未来回放</p>
+              <p className="section-kicker">STALE · 不可用于仿真验证</p>
               <h3 id="confirmed-plan-title">方案已过期，需要重新生成并确认</h3>
               <ul className="stale-reasons">
                 {confirmedPlan.stale_reason_codes.map((reason) => (
@@ -784,13 +860,13 @@ function ParameterPlanningResultView({
             </>
           ) : (
             <>
-              <p className="section-kicker">VALID · 不可变 ConfirmedPlan</p>
-              <h3 id="confirmed-plan-title">方案已人工确认并冻结</h3>
+              <p className="section-kicker">已冻结 · 工程师已确认</p>
+              <h3 id="confirmed-plan-title">已确认调参方案</h3>
               <div className="confirmed-plan-grid">
                 <dl>
                   <div><dt>候选</dt><dd>{confirmedPlan.candidate_id}</dd></div>
                   <div><dt>参数族</dt><dd>{confirmedPlan.parameter_family}</dd></div>
-                  <div><dt>生成类型</dt><dd>{confirmedPlan.generation_type}</dd></div>
+                  <div><dt>方案类型</dt><dd>{candidateTypeLabel(confirmedPlan.generation_type)}</dd></div>
                 </dl>
                 <dl>
                   <div>
@@ -801,7 +877,7 @@ function ParameterPlanningResultView({
                   </div>
                   <div><dt>确认时间</dt><dd>{confirmedPlan.confirmed_at}</dd></div>
                   <div>
-                    <dt>确认方案哈希</dt>
+                    <dt>技术证据哈希</dt>
                     <dd title={confirmedPlan.confirmed_plan_hash}>
                       {confirmedPlan.confirmed_plan_hash.slice(0, 16)}
                     </dd>
@@ -810,8 +886,8 @@ function ParameterPlanningResultView({
               </div>
               <p className="confirmation-disclaimer">
                 {replayCompleted
-                  ? "该 ConfirmedPlan 已用于下方离线模拟回放；没有任何设备参数下发行为。"
-                  : "此操作只冻结离线候选方案；尚未进行模拟回放；没有任何设备参数下发行为。"}
+                  ? "该已确认方案已用于下方执行前仿真验证；没有向真实设备下发参数。"
+                  : "此操作只冻结离线候选方案；尚未进行执行前仿真验证；没有向真实设备下发参数。"}
               </p>
             </>
           )}
@@ -829,13 +905,16 @@ function ParameterPlanningResultView({
         </section>
       )}
 
-      <dl className="planning-version-grid">
+      <details className="technical-details">
+        <summary>查看调参规则版本与结果哈希</summary>
+        <dl className="planning-version-grid">
         <div><dt>方向规则</dt><dd>{result.direction_rule_version}</dd></div>
         <div><dt>安全规则</dt><dd>{result.safety_rule_version}</dd></div>
         <div><dt>约束快照</dt><dd>{result.constraint_snapshot_version}</dd></div>
         <div><dt>规划规则</dt><dd>{result.planning_rule_version}</dd></div>
         <div><dt>结果哈希</dt><dd title={result.result_hash}>{result.result_hash.slice(0, 16)}</dd></div>
-      </dl>
+        </dl>
+      </details>
     </div>
   );
 }
@@ -853,17 +932,18 @@ function ReplayResultView({ result }: { result: ReplayResult }) {
     <section className="replay-result" aria-labelledby="replay-result-title">
       <div className="replay-result-heading">
         <div>
-          <p className="section-kicker">确定性配对模拟干预回放</p>
-          <h2 id="replay-result-title">回放结果</h2>
+          <p className="section-kicker">调参方案仿真</p>
+          <h2 id="replay-result-title">仿真验证结果</h2>
         </div>
         <strong className={`replay-status replay-status-${result.replay_status.toLowerCase()}`}>
-          {result.replay_status}
+          {replayStatusLabel(result.replay_status)}
+          <small>{result.replay_status}</small>
         </strong>
       </div>
 
       <div className="baseline-reproduction" role="status">
-        <strong>基线重现通过</strong>
-        <span>导入基线与模拟基线的 canonical observation hash 完全一致</span>
+        <strong>基线复现通过</strong>
+        <span>导入基线与仿真基线一致；对应技术哈希已校验。</span>
       </div>
 
       <div className="replay-metric-table-wrap">
@@ -886,7 +966,7 @@ function ReplayResultView({ result }: { result: ReplayResult }) {
       </div>
 
       <div className="evaluation-checks" aria-labelledby="evaluation-checks-title">
-        <h3 id="evaluation-checks-title">版本化评估证据</h3>
+        <h3 id="evaluation-checks-title">预设评价规则检查</h3>
         <ul>
           {result.evaluation_checks.map((check) => (
             <li key={check.check_id}>
@@ -903,16 +983,19 @@ function ReplayResultView({ result }: { result: ReplayResult }) {
         </ul>
       </div>
 
-      <div className="replay-result-meta">
-        <span>尝试次数 {result.attempt_count}</span>
-        <span>模拟器 {result.simulator_version}</span>
-        <span>评估规则 {result.replay_evaluation_rule_version}</span>
-        <span title={result.result_hash}>ReplayResult SHA-256 {result.result_hash.slice(0, 16)}…</span>
-      </div>
       <div className="replay-disclaimer">
-        <strong>{result.disclaimer}</strong>
-        <p>{result.no_device_write_notice}</p>
+        <strong>仅表示该参数方案在当前固定模拟条件下满足预设评价规则，不代表真实产线效果。</strong>
+        <p>{result.disclaimer} {result.no_device_write_notice}</p>
       </div>
+      <details className="technical-details replay-technical-details">
+        <summary>查看仿真版本与结果哈希</summary>
+        <div className="replay-result-meta">
+          <span>尝试次数 {result.attempt_count}</span>
+          <span>仿真器 {result.simulator_version}</span>
+          <span>评价规则 {result.replay_evaluation_rule_version}</span>
+          <span title={result.result_hash}>仿真结果哈希（ReplayResult SHA-256） {result.result_hash}</span>
+        </div>
+      </details>
     </section>
   );
 }
@@ -982,13 +1065,13 @@ function DeviceExecutionPanel({
     <section className="device-execution-panel" aria-labelledby="device-execution-title">
       <div className="device-execution-heading">
         <div>
-          <p className="section-kicker">服务端门禁 · OPC-UA sandbox</p>
-          <h2 id="device-execution-title">本地 OPC-UA 模拟设备受控下发</h2>
+          <p className="section-kicker">OPC-UA Sandbox · 本地模拟环境</p>
+          <h2 id="device-execution-title">本地模拟设备执行</h2>
           <p>
-            仅在人工确认方案和确定性回放通过后，由服务端对白名单节点执行写前校验、写入与回读。
+            仅在工程师确认和仿真验证通过后，由服务端对本地白名单节点执行写前校验、写入与读回。
           </p>
         </div>
-        <span className="sandbox-badge">本地模拟设备 · 非真实生产设备</span>
+        <span className="sandbox-badge">LOCAL OPC-UA SANDBOX / 本地模拟环境</span>
       </div>
 
       <dl className="device-status-grid">
@@ -1009,16 +1092,16 @@ function DeviceExecutionPanel({
           </dd>
         </div>
         <div>
-          <dt>回放状态</dt>
-          <dd className="device-value-passed">{eligibility?.replay_status ?? "SUCCESS"}</dd>
+          <dt>仿真验证</dt>
+          <dd className="device-value-passed">已通过 <small>{eligibility?.replay_status ?? "SUCCESS"}</small></dd>
         </div>
       </dl>
 
       {executionState.kind !== "result" && (
         <div className="device-check-action">
           <div>
-            <strong>人工确认后的受控写入</strong>
-            <p>endpoint、节点映射和参数值均由服务端固定，页面不能指定。</p>
+            <strong>工程师确认后的受控执行</strong>
+            <p>设备端点、节点映射和参数值均由服务端固定，页面不能指定。</p>
           </div>
           <button
             className="secondary-action"
@@ -1029,8 +1112,8 @@ function DeviceExecutionPanel({
             {executionState.kind === "checking"
               ? "正在检查资格…"
               : eligibility
-                ? "重新检查设备执行资格"
-                : "检查设备执行资格"}
+                ? "重新检查执行条件"
+                : "检查执行条件"}
           </button>
         </div>
       )}
@@ -1060,7 +1143,7 @@ function DeviceExecutionPanel({
             aria-live="polite"
           >
             <div>
-              <strong>{eligibility.eligible ? "设备执行资格已通过" : "设备执行资格未通过"}</strong>
+              <strong>{eligibility.eligible ? "本地模拟执行条件已通过" : "本地模拟执行条件未通过"}</strong>
               <p>{eligibility.message}</p>
             </div>
             <code>{eligibility.code}</code>
@@ -1072,9 +1155,9 @@ function DeviceExecutionPanel({
             <div><dt>设备当前值</dt><dd>{deviceValue(eligibility.actual_before_value)}</dd></div>
             <div><dt>目标值</dt><dd>{deviceValue(eligibility.requested_after_value)}</dd></div>
             <div><dt>tick 变化</dt><dd>{tickDelta(eligibility.tick_delta)}</dd></div>
-            <div><dt>本地 endpoint</dt><dd>{eligibility.endpoint_local_id}</dd></div>
+            <div><dt>本地设备端点</dt><dd>{eligibility.endpoint_local_id}</dd></div>
             <div><dt>节点映射版本</dt><dd>{eligibility.node_mapping_version}</dd></div>
-            <div><dt>服务端节点</dt><dd>{deviceValue(eligibility.node_id)}</dd></div>
+            <div><dt>OPC-UA 服务端节点</dt><dd>{deviceValue(eligibility.node_id)}</dd></div>
           </dl>
 
           {executionState.kind !== "result" && (
@@ -1101,7 +1184,7 @@ function DeviceExecutionPanel({
               >
                 {executionState.kind === "executing"
                   ? "正在写入并回读验证…"
-                  : "向模拟设备执行受控下发"}
+                  : "在本地模拟设备上执行"}
               </button>
             </div>
           )}
@@ -1111,7 +1194,7 @@ function DeviceExecutionPanel({
       {executionState.kind === "executing" && (
         <div className="device-progress" role="status" aria-live="polite">
           <span className="inline-loader" />
-          <span>WRITE_STARTED · 正在调用设备侧原子条件执行并等待明确结果…</span>
+          <span>正在写入本地模拟设备并读回结果… <small>WRITE_STARTED</small></span>
         </div>
       )}
 
@@ -1125,7 +1208,7 @@ function DeviceExecutionPanel({
             <div>
               <strong>
                 {succeeded
-                  ? "写入并回读验证成功"
+                  ? "本地模拟设备执行成功"
                   : receipt.execution_status === "REJECTED"
                     ? "受控下发已拒绝"
                     : receipt.execution_status === "UNKNOWN_OUTCOME" ||
@@ -1138,14 +1221,14 @@ function DeviceExecutionPanel({
             <code>{receipt.failure_code ?? receipt.execution_status}</code>
           </div>
           <dl className="device-receipt-grid">
-            <div><dt>执行状态</dt><dd>{receipt.execution_status}</dd></div>
+            <div><dt>执行状态</dt><dd>{succeeded ? "执行成功" : receipt.execution_status} <small>{receipt.execution_status}</small></dd></div>
             <div><dt>写前实际值</dt><dd>{deviceValue(receipt.actual_before_value)}</dd></div>
             <div><dt>请求目标值</dt><dd>{deviceValue(receipt.requested_after_value)}</dd></div>
-            <div><dt>写后回读值</dt><dd>{deviceValue(receipt.actual_after_value)}</dd></div>
+            <div><dt>执行后读回值</dt><dd>{deviceValue(receipt.actual_after_value)}</dd></div>
             <div><dt>写入次数</dt><dd>{receipt.write_attempt_count}</dd></div>
             <div><dt>幂等结果</dt><dd>{idempotentReplay ? "复用首次凭证" : "首次执行"}</dd></div>
             <div className="device-receipt-hash">
-              <dt>receipt hash</dt>
+              <dt>执行记录哈希（receipt hash）</dt>
               <dd title={receipt.receipt_hash}>{receipt.receipt_hash}</dd>
             </div>
           </dl>
@@ -1480,7 +1563,7 @@ function App() {
       setReplayState({
         kind: "error",
         code: "PAIRED_REPLAY_FAILED",
-        message: "本地确定性配对模拟干预回放暂时不可用。",
+        message: "本地执行前仿真验证暂时不可用。",
       });
     }
   }
@@ -1566,7 +1649,7 @@ function App() {
             <span className="brand-mark">TW</span>
             <span>
               <strong>TuneWise</strong>
-              <small>离线调机决策支持</small>
+              <small>AA 工站 AI 调机决策支持</small>
             </span>
           </a>
           <div className="topbar-context">
@@ -1584,21 +1667,28 @@ function App() {
       <main id="workspace" className="workspace" tabIndex={-1}>
         <section className="task-overview" aria-label="任务概览">
           <div className="task-heading">
-            <p className="context-label">AA 工站 / 调机任务</p>
+            <p className="context-label">TuneWise · 本地离线比赛原型</p>
             <div className="title-row">
-              <h1>任务与版本状态</h1>
-              <span className="readonly-label">只读工作区</span>
+              <h1>AA 工站 AI 调机决策支持</h1>
+              <span className="readonly-label">模拟演示</span>
             </div>
             <p className="hero-copy">
-              {dataImport
-                ? "预置 AA 批次已完成版本、格式与内容完整性校验，任务已推进到数据导入阶段。"
-                : "本地版本资产已通过完整性校验。请选择冻结的预置 AA 批次完成数据导入。"}
+              AI 分析 AA（Active Alignment，主动对准）测量异常并提供调参候选，
+              工程师确认后先进行执行前仿真验证。
             </p>
+            <ol className="judge-flow" aria-label="TuneWise 决策流程">
+              <li><span>1</span><strong>输入</strong><small>AA 测量数据</small></li>
+              <li><span>2</span><strong>AI 判断</strong><small>异常与根因优先级</small></li>
+              <li><span>3</span><strong>AI 推荐</strong><small>调参候选方案</small></li>
+              <li><span>4</span><strong>工程师确认</strong><small>决定是否采用</small></li>
+              <li><span>5</span><strong>执行前仿真</strong><small>固定模拟条件</small></li>
+            </ol>
+            <p className="hero-boundary">当前是本地模拟演示，未连接真实生产设备，不代表真实产线效果。</p>
           </div>
           <dl className="task-summary">
             <div className="task-state">
               <dt>当前任务状态</dt>
-              <dd>{task.status}</dd>
+              <dd>{taskStatusLabels[task.status] ?? "演示流程进行中"} <small>{task.status}</small></dd>
             </div>
             <div>
               <dt>任务 ID</dt>
@@ -1617,10 +1707,10 @@ function App() {
         <section className="import-panel" aria-labelledby="import-title">
           <div className="import-intro">
             <div>
-              <p className="section-kicker">版本化演示资产</p>
-              <h2 id="import-title">导入 AA 观测批次</h2>
+              <p className="section-kicker">第 1 步 · 输入</p>
+              <h2 id="import-title">导入 AA 测量数据</h2>
               <p className="import-copy">
-                服务端校验冻结字段、DatasetManifest、版本、原始字节哈希与规范化观测哈希。
+                使用预置的合成 AA 异常批次，服务端同时校验数据完整性。
               </p>
             </div>
             <div className="preset-asset-card">
@@ -1711,20 +1801,17 @@ function App() {
                     ))}
                   </dl>
                 </div>
+              </div>
+              <details className="technical-details import-technical-details">
+                <summary>查看数据版本与完整性哈希</summary>
                 <div className="hash-summary">
-                  <p className="metric-label">数据与哈希</p>
                   <dl>
                     <div><dt>dataset</dt><dd>{task.versions.dataset_version}</dd></div>
                     <div><dt>canonicalizer</dt><dd>{task.versions.canonicalizer_version}</dd></div>
-                    <div>
-                      <dt>canonical SHA-256</dt>
-                      <dd title={dataImport.hashes.canonical_observation_hash}>
-                        {dataImport.hashes.canonical_observation_hash.slice(0, 12)}
-                      </dd>
-                    </div>
+                    <div><dt>canonical SHA-256</dt><dd title={dataImport.hashes.canonical_observation_hash}>{dataImport.hashes.canonical_observation_hash}</dd></div>
                   </dl>
                 </div>
-              </div>
+              </details>
             </div>
           )}
         </section>
@@ -1779,10 +1866,10 @@ function App() {
           <section className="diagnosis-panel" aria-labelledby="diagnosis-title">
             <div className="detection-intro">
               <div>
-                <p className="section-kicker">固定预处理器与逻辑回归</p>
-                <h2 id="diagnosis-title">根因诊断与证据充足度</h2>
+                <p className="section-kicker">第 3 步 · AI 判断</p>
+                <h2 id="diagnosis-title">异常诊断结果</h2>
                 <p className="import-copy">
-                  服务端按固定特征顺序执行离线推理、Z 类硬门控、稳定 Top-3 与结构化解释。
+                  AI 对可能根因进行相对排序，并展示支持与冲突证据。
                 </p>
               </div>
               <button
@@ -1812,13 +1899,13 @@ function App() {
                 <section className="case-retrieval-section" aria-labelledby="case-retrieval-title">
                   <div className="case-retrieval-intro">
                     <div>
-                      <p className="section-kicker">独立标准化器 · 结构化 KNN</p>
-                      <h2 id="case-retrieval-title">相似案例</h2>
+                      <p className="section-kicker">决策依据</p>
+                      <h2 id="case-retrieval-title">历史参考案例</h2>
                       <p className="import-copy">
-                        先检索当前 Top-3 根因池，不足时再由其余兼容案例补足；根因与历史动作不参与距离计算。
+                        检索已审核的离线案例，作为调参候选的参考证据。
                       </p>
                     </div>
-                    <span className="approved-only-note">仅检索 APPROVED 案例</span>
+                    <span className="approved-only-note">仅检索已审核案例</span>
                     <button
                       className="primary-action detection-action"
                       type="button"
@@ -1858,10 +1945,10 @@ function App() {
                 <section className="parameter-planning-section" aria-labelledby="parameter-planning-title">
                   <div className="parameter-planning-intro">
                     <div>
-                      <p className="section-kicker">确定性方向规则 · 统一安全校验</p>
-                      <h2 id="parameter-planning-title">安全参数候选</h2>
+                      <p className="section-kicker">第 4 步 · AI 推荐，工程师确认</p>
+                      <h2 id="parameter-planning-title">调参候选方案</h2>
                       <p className="import-copy">
-                        服务端独立形成方向证据，按 tick 生成候选，并由同一安全规则逐项校验。
+                        AI 根据当前证据生成多组参数方案，安全校验通过后交由工程师选择。
                       </p>
                     </div>
                     <span className="readonly-label">只读候选</span>
@@ -1878,8 +1965,8 @@ function App() {
                       {parameterPlanningState.kind === "success" || task.parameter_planning_result
                         ? "候选生成已完成"
                         : parameterPlanningState.kind === "error"
-                          ? "重新生成安全参数候选"
-                          : "生成安全参数候选"}
+                          ? "重新生成调参候选方案"
+                          : "生成调参候选方案"}
                     </button>
                   </div>
                   {parameterPlanningState.kind === "loading" && (
@@ -1928,10 +2015,10 @@ function App() {
           <section className="replay-panel" aria-labelledby="replay-panel-title">
             <div className="replay-panel-heading">
               <div>
-                <p className="section-kicker">固定版本 · 服务端权威参数</p>
-                <h2 id="replay-panel-title">确定性配对模拟干预回放</h2>
+                <p className="section-kicker">第 5 步 · Simulation Validation (Replay)</p>
+                <h2 id="replay-panel-title">执行前仿真验证（Replay）</h2>
                 <p>
-                  使用已冻结 ConfirmedPlan，在相同隐藏场景、固定 seed 与相同扰动下比较调整前后结果。
+                  使用已确认调参方案，在相同固定场景与扰动下比较调整前后结果。
                 </p>
               </div>
               {!task.replay_result &&
@@ -1943,7 +2030,7 @@ function App() {
                     disabled={replayState.kind === "loading"}
                     onClick={handleReplay}
                   >
-                    运行离线模拟回放
+                    运行调参方案仿真
                   </button>
                 )}
             </div>
@@ -1951,7 +2038,7 @@ function App() {
             {!task.replay_result && (
               <>
                 <dl className="replay-confirmation-summary">
-                  <div><dt>ConfirmedPlan</dt><dd>{task.confirmed_plan.confirmed_plan_id}</dd></div>
+                  <div><dt>已确认调参方案</dt><dd>{task.confirmed_plan.confirmed_plan_id}</dd></div>
                   <div title={task.confirmed_plan.confirmed_plan_hash}>
                     <dt>确认哈希</dt><dd>{task.confirmed_plan.confirmed_plan_hash.slice(0, 16)}…</dd>
                   </div>
@@ -1960,25 +2047,25 @@ function App() {
                 </dl>
                 {task.confirmed_plan.status === "STALE" && (
                   <div className="inline-error" role="status">
-                    <div><strong>方案已过期，不能执行回放</strong><p>请重新生成并人工确认候选方案。</p></div>
+                    <div><strong>方案已过期，不能执行仿真验证</strong><p>请重新生成并由工程师确认候选方案。</p></div>
                     <code>CONFIRMED_PLAN_STALE</code>
                   </div>
                 )}
                 <div className="replay-disclaimer">
-                  <strong>规则约束模拟环境中的离线回放结果，不代表真实产线良率改善。</strong>
-                  <p>本次回放仅比较固定模型、固定场景和固定扰动下的模拟结果，未向真实设备写入任何参数。</p>
+                  <strong>仅表示该参数方案在当前固定模拟条件下满足预设评价规则，不代表真实产线效果。</strong>
+                  <p>本次仿真未向真实设备写入任何参数。</p>
                 </div>
               </>
             )}
             {replayState.kind === "loading" && (
               <div className="replay-progress" role="status" aria-live="polite">
                 <span className="inline-loader" />
-                <span>REPLAYING · 正在执行确定性配对模拟干预回放…</span>
+                <span>正在执行调参方案仿真… <small>REPLAYING</small></span>
               </div>
             )}
             {replayState.kind === "error" && (
               <div className="inline-error" role="alert">
-                <div><strong>离线模拟回放已拒绝</strong><p>{replayState.message}</p></div>
+                <div><strong>仿真验证未执行</strong><p>{replayState.message}</p></div>
                 <code>{replayState.code}</code>
               </div>
             )}
@@ -2004,7 +2091,12 @@ function App() {
             </div>
             <p className="section-note">
               <span>{String(currentStageIndex + 1).padStart(2, "0")} / 10</span>
-              当前阶段：{task.stages[currentStageIndex]?.label}
+              当前阶段：{task.stages[currentStageIndex]
+                ? workflowStageLabel(
+                    task.stages[currentStageIndex].code,
+                    task.stages[currentStageIndex].label,
+                  )
+                : "未知"}
             </p>
           </div>
           <nav aria-label="任务阶段">
@@ -2013,13 +2105,13 @@ function App() {
                 <li
                   key={stage.code}
                   className={`stage stage-${stage.availability}`}
-                  aria-label={`阶段 ${stage.label}`}
+                  aria-label={`阶段 ${workflowStageLabel(stage.code, stage.label)}`}
                   aria-current={stage.availability === "current" ? "step" : undefined}
                   aria-disabled={stage.availability === "locked"}
                 >
                   <span className="stage-index">{String(index + 1).padStart(2, "0")}</span>
                   <span className="stage-copy">
-                    <strong>{stage.label}</strong>
+                    <strong>{workflowStageLabel(stage.code, stage.label)}</strong>
                     <small>{stage.code}</small>
                   </span>
                   <span className="stage-state">
@@ -2085,8 +2177,8 @@ function App() {
         </div>
       </main>
       <footer className="app-footer">
-        <span>仅用于规则约束模拟环境中的离线比赛原型</span>
-        <span>无真实设备连接 · 无在线服务依赖</span>
+        <span>本地合成数据与固定模拟环境中的比赛原型</span>
+        <span>非真实产线 · 非真实设备效果验证</span>
       </footer>
     </div>
   );

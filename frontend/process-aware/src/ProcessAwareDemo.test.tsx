@@ -195,9 +195,9 @@ describe("ProcessAwareDemo", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
     render(<ProcessAwareDemo />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "Process-aware Decision Demo" })).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("Loading deterministic comparison");
-    expect(screen.getByRole("link", { name: "Return to fixed demo" }).getAttribute("href")).toBe("/");
+    expect(screen.getByRole("heading", { level: 1, name: "结合调机步骤的决策演示" })).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("正在加载场景对比");
+    expect(screen.getByRole("link", { name: "返回固定端到端演示" }).getAttribute("href")).toBe("/");
   });
 
   test("provides an accessible API error and retry control", async () => {
@@ -205,31 +205,33 @@ describe("ProcessAwareDemo", () => {
     render(<ProcessAwareDemo />);
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("Process-aware comparison unavailable");
+    expect(alert.textContent).toContain("暂时无法加载调机过程对比");
     expect(alert.textContent).toContain("HTTP 503");
-    expect(within(alert).getByRole("button", { name: "Retry comparison" })).toBeTruthy();
+    expect(within(alert).getByRole("button", { name: "重新加载" })).toBeTruthy();
   });
 
   test("shows the exact facts boundary and shared deterministic evidence", async () => {
     const fetchMock = mockSuccessfulFetch();
     render(<ProcessAwareDemo />);
 
-    await screen.findByText("Synthetic process-context demonstration.");
-    expect(screen.getByText("Demonstrates deterministic context-sensitive evidence selection.")).toBeTruthy();
-    expect(screen.getByText("Does not represent Sunny Optical SOP or validated production tuning accuracy.")).toBeTruthy();
+    await screen.findByText("这是合成调机过程演示。");
+    expect(screen.getByText("当前演示用于证明 TuneWise 能根据不同调机过程信息选择不同的历史参考案例。")).toBeTruthy();
+    expect(document.querySelector(".boundary-english")?.textContent).toContain(
+      demoResponse.facts_boundary,
+    );
     expect(
       screen.getByText("TuneWise process-context abstractions; not industry-standard states."),
     ).toBeTruthy();
 
-    expect(screen.getByText("Same measurement evidence")).toBeTruthy();
-    expect(screen.getByText("Same root-cause ranking")).toBeTruthy();
+    expect(screen.getByText("测量数据")).toBeTruthy();
+    expect(screen.getByText("根因判断")).toBeTruthy();
     expect(screen.getAllByText("PLANE_TILT").length).toBeGreaterThan(0);
     expect(screen.getByText("Top-1")).toBeTruthy();
-    expect(screen.getByText("50-D")).toBeTruthy();
+    expect(screen.getByText("50 维")).toBeTruthy();
     expect(screen.getByText("tw-feature-definition-v1")).toBeTruthy();
-    expect(screen.getByLabelText("Scaler: tw-case-retrieval-scaler-v1")).toBeTruthy();
-    expect(screen.getByLabelText(`Query feature: ${"b".repeat(64)}`)).toBeTruthy();
-    expect(screen.getByLabelText(`Case index: ${"c".repeat(64)}`)).toBeTruthy();
+    expect(screen.getByLabelText("标准化器版本: tw-case-retrieval-scaler-v1")).toBeTruthy();
+    expect(screen.getByLabelText(`检索特征哈希: ${"b".repeat(64)}`)).toBeTruthy();
+    expect(screen.getByLabelText(`案例索引哈希: ${"c".repeat(64)}`)).toBeTruthy();
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/demos/process-aware",
@@ -246,11 +248,11 @@ describe("ProcessAwareDemo", () => {
 
     const scenarioAHeading = within(comparison).getByRole("heading", {
       level: 3,
-      name: "Initial Assessment / 初始评估",
+      name: "初始评估 / Initial Assessment",
     });
     const scenarioBHeading = within(comparison).getByRole("heading", {
       level: 3,
-      name: "Post-adjustment Evaluation / 调整后评估",
+      name: "调整后评估 / Post-adjustment Evaluation",
     });
     const scenarioA = scenarioAHeading.closest("article");
     const scenarioB = scenarioBHeading.closest("article");
@@ -259,8 +261,7 @@ describe("ProcessAwareDemo", () => {
 
     const a = within(scenarioA as HTMLElement);
     expect(a.getAllByText("INITIAL_ASSESSMENT").length).toBeGreaterThan(0);
-    expect(a.getByText("No previous action / outcome")).toBeTruthy();
-    expect(a.getByText("Case 011")).toBeTruthy();
+    expect(a.getByText("无")).toBeTruthy();
     expect(a.getByText("tw-aa-approved-011")).toBeTruthy();
     expect(a.getByText("CASE_GUIDED")).toBeTruthy();
     expect(a.getByText("-3")).toBeTruthy();
@@ -270,27 +271,26 @@ describe("ProcessAwareDemo", () => {
     expect(b.getAllByText("0.250000").length).toBeGreaterThan(0);
     expect(b.getAllByText("0.200000").length).toBeGreaterThan(0);
     expect(b.getAllByText("NO_MATERIAL_IMPROVEMENT").length).toBeGreaterThan(0);
-    expect(b.getByText("No Material Improvement / 未观察到显著改善")).toBeTruthy();
-    expect(b.getByText("Case 003")).toBeTruthy();
+    expect(b.getByText("未观察到显著改善")).toBeTruthy();
     expect(b.getByText("tw-aa-approved-003")).toBeTruthy();
     expect(b.getByText("CASE_GUIDED")).toBeTruthy();
     expect(b.getByText("-4")).toBeTruthy();
 
     expect(within(comparison).getAllByText("CONTEXT_MATCH")).toHaveLength(2);
-    expect(within(comparison).getAllByText("Synthetic context")).toHaveLength(2);
-    expect(within(comparison).getAllByText("Synthetic profile")).toHaveLength(2);
-    expect(within(comparison).getAllByText("Eligible historical case")).toHaveLength(2);
-    expect(within(comparison).getAllByText("APPROVED offline case · synthetic process profile")).toHaveLength(2);
-    expect(within(comparison).getAllByText("Retrieval distance, not a probability.")).toHaveLength(2);
+    expect(within(comparison).getAllByText("合成调机过程")).toHaveLength(2);
+    expect(within(comparison).getAllByText("合成案例条件")).toHaveLength(2);
+    expect(within(comparison).getAllByText("当前适用案例")).toHaveLength(2);
+    expect(within(comparison).getAllByText("已审核离线案例 · 合成调机过程条件")).toHaveLength(2);
+    expect(within(comparison).getAllByText("用于案例排序，不是概率。")).toHaveLength(2);
   });
 
   test("keeps control candidates and the Safety Validator visibly unchanged without positive production claims", async () => {
     mockSuccessfulFetch();
     render(<ProcessAwareDemo />);
 
-    await screen.findByRole("heading", { level: 3, name: "CONSERVATIVE unchanged" });
-    expect(screen.getByRole("heading", { level: 3, name: "STANDARD unchanged" })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 3, name: "Safety Validator unchanged" })).toBeTruthy();
+    await screen.findByRole("heading", { level: 3, name: "保守调整方案未改变" });
+    expect(screen.getByRole("heading", { level: 3, name: "标准调整方案未改变" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3, name: "安全校验规则未改变" })).toBeTruthy();
     const conservativeHashProof = screen.getByLabelText(
       "CONSERVATIVE A and B candidate hashes match",
     );
@@ -304,7 +304,7 @@ describe("ProcessAwareDemo", () => {
     expect(screen.getByText("CURRENT_VALUE_GRID")).toBeTruthy();
     expect(screen.getByText("MAXIMUM_SINGLE_PLAN_DELTA")).toBeTruthy();
     expect(screen.getByText("NOMINAL_NOT_CROSSED")).toBeTruthy();
-    expect(screen.getByText("Identical across A + B")).toBeTruthy();
+    expect(screen.getByText("A / B 控制项一致")).toBeTruthy();
 
     for (const forbiddenClaim of [
       "Real AA Process",
@@ -342,15 +342,15 @@ describe("ProcessAwareDemo", () => {
     render(<ProcessAwareDemo />);
 
     expect(
-      await screen.findByRole("heading", { level: 3, name: "CONSERVATIVE mismatch" }),
+      await screen.findByRole("heading", { level: 3, name: "保守调整方案不一致" }),
     ).toBeTruthy();
-    expect(screen.queryByRole("heading", { level: 3, name: "CONSERVATIVE unchanged" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 3, name: "保守调整方案未改变" })).toBeNull();
     const proof = screen.getByLabelText("CONSERVATIVE A and B candidate hashes do not match");
     const hashes = proof.querySelectorAll("code");
     expect(hashes[0].getAttribute("title")).toBe("3".repeat(64));
     expect(hashes[1].getAttribute("title")).toBe("9".repeat(64));
     expect(proof.textContent).toContain("≠");
-    expect(screen.getByRole("heading", { level: 3, name: "Safety Validator mismatch" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { level: 3, name: "Safety Validator unchanged" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 3, name: "安全校验规则不一致" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 3, name: "安全校验规则未改变" })).toBeNull();
   });
 });

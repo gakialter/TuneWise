@@ -949,7 +949,7 @@ test("imports the preset batch and renders verified metrics and hashes", async (
   expect(screen.getAllByText("0.567683")).toHaveLength(2);
   expect(screen.getByText("0.184837")).toBeTruthy();
   expect(screen.getByText("0.071709")).toBeTruthy();
-  expect(screen.getByText("c74206387e06")).toBeTruthy();
+  expect(screen.getByText(importedTaskResponse.data_import.hashes.canonical_observation_hash)).toBeTruthy();
   expect(screen.getByText("24 条观测")).toBeTruthy();
   expect(screen.getByText("已完成")).toBeTruthy();
 });
@@ -1052,13 +1052,13 @@ test.each([
   fireEvent.click(await screen.findByRole("button", { name: "运行异常检测" }));
 
   expect(await screen.findByRole("heading", { name: heading })).toBeTruthy();
-  expect(screen.getByText(result)).toBeTruthy();
+  expect(screen.getByText(result, { exact: false })).toBeTruthy();
   expect(screen.getByText("中心 MTF")).toBeTruthy();
   expect(screen.getByText("0.720000", { exact: false })).toBeTruthy();
   expect(screen.getByText("越限样本数量")).toBeTruthy();
   expect(screen.getByText("最大连续越限")).toBeTruthy();
   expect(screen.getByText("tw-rules-v1")).toBeTruthy();
-  expect(screen.getByText("c74206387e06")).toBeTruthy();
+  expect(screen.getAllByText("c74206387e06", { exact: false }).length).toBeGreaterThan(0);
   expect(fetchMock).toHaveBeenLastCalledWith(
     "/api/tasks/tw-demo-task-001/detections",
     {
@@ -1168,9 +1168,10 @@ test("runs diagnosis and renders backend Top-3 structured evidence and versions"
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "运行根因诊断" }));
 
-  expect(await screen.findByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "根因优先级" })).toBeTruthy();
   expect(screen.getAllByText("PLANE_TILT").length).toBeGreaterThan(0);
-  expect(screen.getByText("98.21%")).toBeTruthy();
+  expect(screen.getByText("0.982100")).toBeTruthy();
+  expect(screen.getByText(/0\.997781.*99\.7781% 故障概率/)).toBeTruthy();
   expect(screen.getAllByText("可调").length).toBeGreaterThan(0);
   expect(screen.getByText("仅排查")).toBeTruthy();
   expect(screen.getAllByText("该特征对当前类别 logit 的贡献").length).toBeGreaterThan(0);
@@ -1249,7 +1250,7 @@ test("renders insufficient evidence protection while preserving Top-3", async ()
   expect(await screen.findByText("INSUFFICIENT_EVIDENCE")).toBeTruthy();
   expect(screen.getByText("诊断证据不足，仅供排查")).toBeTruthy();
   expect(screen.getByText(/参数候选数量固定为 0/)).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "根因优先级" })).toBeTruthy();
   expect(screen.getAllByText("DIAGNOSED")).toHaveLength(2);
   expect(screen.getAllByText("未开放").length).toBeGreaterThan(0);
 });
@@ -1310,12 +1311,12 @@ test("retrieves and displays at most three approved cases with neutral evidence"
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "检索已审核案例" }));
 
-  expect(await screen.findByRole("heading", { name: "相似案例" })).toBeTruthy();
-  expect(screen.getByText("仅检索 APPROVED 案例")).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "历史参考案例" })).toBeTruthy();
+  expect(screen.getByText("仅检索已审核案例")).toBeTruthy();
   expect(screen.getAllByRole("listitem", { name: /已审核案例/ })).toHaveLength(3);
   expect(screen.getByText("tw-aa-approved-011")).toBeTruthy();
   expect(screen.getAllByText("PLANE_TILT").length).toBeGreaterThan(0);
-  expect(screen.getByText("距离 0.424311")).toBeTruthy();
+  expect(screen.getByText("特征差异距离 0.424311")).toBeTruthy();
   expect(screen.getAllByText("pitch_mean").length).toBeGreaterThan(0);
   expect(screen.getAllByText("历史处理动作").length).toBeGreaterThan(0);
   expect(
@@ -1323,7 +1324,7 @@ test("retrieves and displays at most three approved cases with neutral evidence"
   ).toBeGreaterThan(0);
   expect(screen.getByText("tw-approved-case-index-v1")).toBeTruthy();
   expect(screen.getByText("tw-case-retrieval-scaler-v1")).toBeTruthy();
-  expect(screen.getByText(/不表示根因真实性、因果关系或真实设备适用概率/)).toBeTruthy();
+  expect(screen.getByText(/不代表根因概率、因果关系或真实设备适用率/)).toBeTruthy();
   expect(screen.queryByText(/推荐采用|一键复用|最佳历史方案/)).toBeNull();
   expect(fetchMock).toHaveBeenLastCalledWith(
     "/api/tasks/tw-demo-task-001/case-retrievals",
@@ -1427,7 +1428,7 @@ test("renders structured case retrieval errors without replacing diagnosis", asy
 
   expect(await screen.findByText("案例检索资产内容哈希不匹配：index.json")).toBeTruthy();
   expect(screen.getByText("CASE_ASSET_HASH_MISMATCH")).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "根因优先级" })).toBeTruthy();
 });
 
 test("generates and displays three read-only safety-constrained candidates", async () => {
@@ -1456,11 +1457,11 @@ test("generates and displays three read-only safety-constrained candidates", asy
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "检索已审核案例" }));
   await screen.findByText("tw-aa-approved-011");
-  fireEvent.click(screen.getByRole("button", { name: "生成安全参数候选" }));
+  fireEvent.click(screen.getByRole("button", { name: "生成调参候选方案" }));
 
   expect(
     await screen.findByRole("heading", {
-      name: "通过当前证据和安全规则生成的候选方案",
+      name: "调参候选方案",
     }),
   ).toBeTruthy();
   expect(screen.getByText("CANDIDATES_AVAILABLE")).toBeTruthy();
@@ -1474,15 +1475,15 @@ test("generates and displays three read-only safety-constrained candidates", asy
   expect(screen.getAllByText("[-1.000000, 1.000000]").length).toBeGreaterThan(0);
   expect(screen.getAllByText("步长 0.050000").length).toBeGreaterThan(0);
   expect(screen.getAllByText("最大变化 0.200000").length).toBeGreaterThan(0);
-  expect(screen.getByText("支持案例 3")).toBeTruthy();
+  expect(screen.getByText("参考案例 3")).toBeTruthy();
   expect(screen.getAllByText("PASSED").length).toBeGreaterThan(2);
   expect(screen.getByText("tw-direction-rules-v1")).toBeTruthy();
   expect(screen.getByText("tw-parameter-safety-v1")).toBeTruthy();
   expect(screen.getByText("tw-parameter-constraints-v1")).toBeTruthy();
   expect(screen.getAllByText(/候选哈希/)).toHaveLength(3);
-  expect(screen.getByText(/结果哈希/)).toBeTruthy();
+  expect(screen.getAllByText(/结果哈希/).length).toBeGreaterThan(0);
   expect(screen.queryByText(/最优参数|最佳方案|预测最优|自动写入|已执行/)).toBeNull();
-  expect(screen.getByRole("button", { name: "人工确认候选方案" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "工程师确认采用" })).toBeTruthy();
   expect(fetchMock).toHaveBeenLastCalledWith(
     "/api/tasks/tw-demo-task-001/parameter-plans",
     {
@@ -1515,7 +1516,7 @@ test("shows accessible parameter planning loading and disables duplicate action"
   );
 
   render(<App />);
-  const action = await screen.findByRole("button", { name: "生成安全参数候选" });
+  const action = await screen.findByRole("button", { name: "生成调参候选方案" });
   fireEvent.click(action);
 
   expect(await screen.findByText("正在生成方向证据并执行统一安全校验…")).toBeTruthy();
@@ -1549,7 +1550,7 @@ test("renders structured planning refusal and inspection-only actions", async ()
   );
 
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "生成安全参数候选" }));
+  fireEvent.click(await screen.findByRole("button", { name: "生成调参候选方案" }));
 
   expect(await screen.findByText("PARAMETER_RECOMMENDATION_REFUSED")).toBeTruthy();
   expect(screen.getByText("PLATFORM_INSTABILITY_INSPECTION_ONLY")).toBeTruthy();
@@ -1604,11 +1605,11 @@ test("renders structured parameter planning errors without replacing diagnosis",
   );
 
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "生成安全参数候选" }));
+  fireEvent.click(await screen.findByRole("button", { name: "生成调参候选方案" }));
 
   expect(await screen.findByText("参数规划规则资产内容哈希不匹配。")).toBeTruthy();
   expect(screen.getByText("PLANNING_ASSET_HASH_MISMATCH")).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Top-3 根因排查顺序" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "根因优先级" })).toBeTruthy();
 });
 
 test("selects one passed candidate and confirms only its identity with loading feedback", async () => {
@@ -1628,9 +1629,9 @@ test("selects one passed candidate and confirms only its identity with loading f
   vi.stubGlobal("fetch", fetchMock);
 
   render(<App />);
-  const confirm = await screen.findByRole("button", { name: "人工确认候选方案" });
+  const confirm = await screen.findByRole("button", { name: "工程师确认采用" });
   expect((confirm as HTMLButtonElement).disabled).toBe(true);
-  const candidate = screen.getByRole("radio", { name: /CONSERVATIVE/ });
+  const candidate = screen.getByRole("radio", { name: /保守调整方案/ });
   fireEvent.click(candidate);
   expect((candidate as HTMLInputElement).checked).toBe(true);
   expect((confirm as HTMLButtonElement).disabled).toBe(false);
@@ -1644,11 +1645,13 @@ test("selects one passed candidate and confirms only its identity with loading f
     }),
   );
 
-  expect(await screen.findByText("方案已人工确认并冻结")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "已确认调参方案" }),
+    ).toBeTruthy();
   expect(screen.getAllByText("PLAN_CONFIRMED").length).toBeGreaterThan(0);
-  expect(screen.getByText(/尚未进行模拟回放/)).toBeTruthy();
-  expect(screen.getByText(/未向真实设备写入任何参数/)).toBeTruthy();
-  expect(screen.getByText(/确认方案哈希/)).toBeTruthy();
+  expect(screen.getByText(/尚未进行执行前仿真验证/)).toBeTruthy();
+  expect(screen.getByText(/没有向真实设备下发参数/)).toBeTruthy();
+  expect(screen.getByText(/技术证据哈希/)).toBeTruthy();
   expect(fetchMock).toHaveBeenLastCalledWith(
     "/api/tasks/tw-demo-task-001/confirmed-plans",
     {
@@ -1687,9 +1690,9 @@ test("shows structured confirmation tamper or conflict error inline", async () =
   );
 
   render(<App />);
-  const selected = await screen.findByRole("radio", { name: /STANDARD/ });
+  const selected = await screen.findByRole("radio", { name: /标准调整方案/ });
   fireEvent.click(selected);
-  fireEvent.click(screen.getByRole("button", { name: "人工确认候选方案" }));
+  fireEvent.click(screen.getByRole("button", { name: "工程师确认采用" }));
 
   expect(
     await screen.findByText("请求 candidate_hash 与服务端当前候选不一致。"),
@@ -1698,7 +1701,7 @@ test("shows structured confirmation tamper or conflict error inline", async () =
   expect((selected as HTMLInputElement).disabled).toBe(true);
   expect(screen.getByText("该候选已失效")).toBeTruthy();
   expect(
-    (screen.getByRole("button", { name: "人工确认候选方案" }) as HTMLButtonElement)
+    (screen.getByRole("button", { name: "工程师确认采用" }) as HTMLButtonElement)
       .disabled,
   ).toBe(true);
 });
@@ -1728,16 +1731,16 @@ test("disables the whole confirmation context after a planning-level stale error
   );
 
   render(<App />);
-  const selected = await screen.findByRole("radio", { name: /STANDARD/ });
+  const selected = await screen.findByRole("radio", { name: /标准调整方案/ });
   fireEvent.click(selected);
-  fireEvent.click(screen.getByRole("button", { name: "人工确认候选方案" }));
+  fireEvent.click(screen.getByRole("button", { name: "工程师确认采用" }));
 
   expect(await screen.findByText("当前参数规划结果已过期。")).toBeTruthy();
   for (const radio of screen.getAllByRole("radio")) {
     expect((radio as HTMLInputElement).disabled).toBe(true);
   }
   expect(
-    (screen.getByRole("button", { name: "人工确认候选方案" }) as HTMLButtonElement)
+    (screen.getByRole("button", { name: "工程师确认采用" }) as HTMLButtonElement)
       .disabled,
   ).toBe(true);
 });
@@ -1759,7 +1762,7 @@ test("renders persisted stale confirmed plan as permanently unavailable", async 
     await screen.findByText("方案已过期，需要重新生成并确认"),
   ).toBeTruthy();
   expect(screen.getByText("INPUT_DATA_CHANGED")).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "人工确认候选方案" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "工程师确认采用" })).toBeNull();
   expect(screen.queryByRole("button", { name: /回放|执行|写入设备/ })).toBeNull();
 });
 
@@ -1781,10 +1784,10 @@ test("runs replay with only confirmed identity and renders accessible loading", 
   vi.stubGlobal("fetch", fetchMock);
 
   render(<App />);
-  const button = await screen.findByRole("button", { name: "运行离线模拟回放" });
+  const button = await screen.findByRole("button", { name: "运行调参方案仿真" });
   fireEvent.click(button);
 
-  expect(await screen.findByText("REPLAYING · 正在执行确定性配对模拟干预回放…")).toBeTruthy();
+  expect(await screen.findByText("正在执行调参方案仿真…", { exact: false })).toBeTruthy();
   expect((button as HTMLButtonElement).disabled).toBe(true);
   const body = JSON.parse(fetchMock.mock.calls[1][1].body as string);
   expect(body).toEqual({
@@ -1803,7 +1806,7 @@ test("runs replay with only confirmed identity and renders accessible loading", 
       headers: { "Content-Type": "application/json" },
     }),
   );
-  expect(await screen.findByRole("heading", { name: "回放结果" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "仿真验证结果" })).toBeTruthy();
 });
 
 test("renders baseline reproduction before after checks hash and persistent disclaimers", async () => {
@@ -1819,18 +1822,18 @@ test("renders baseline reproduction before after checks hash and persistent disc
 
   render(<App />);
 
-  expect(await screen.findByText("基线重现通过")).toBeTruthy();
+  expect(await screen.findByText("基线复现通过")).toBeTruthy();
   expect(screen.getByText("调整前")).toBeTruthy();
   expect(screen.getByText("调整后")).toBeTruthy();
   expect(screen.getByText("WORST_CORNER_IMPROVEMENT")).toBeTruthy();
   expect(screen.getByText("尝试次数 1")).toBeTruthy();
   expect(screen.getByText(/ReplayResult SHA-256/)).toBeTruthy();
-  expect(screen.getByText("规则约束模拟环境中的离线回放结果，不代表真实产线良率改善。")).toBeTruthy();
+  expect(screen.getByText("仅表示该参数方案在当前固定模拟条件下满足预设评价规则，不代表真实产线效果。")).toBeTruthy();
   expect(screen.getByText(/未向真实设备写入任何参数/)).toBeTruthy();
   expect(screen.queryByRole("button", { name: /写入设备|自动应用/ })).toBeNull();
   expect(document.body.textContent).not.toContain("真实良率提升");
   expect(document.body.textContent).not.toContain("最优参数");
-  expect(document.body.textContent).not.toContain("尚未进行模拟回放");
+  expect(document.body.textContent).not.toContain("尚未进行执行前仿真验证");
 });
 
 test("does not expose device execution before a successful replay", async () => {
@@ -1853,8 +1856,8 @@ test("does not expose device execution before a successful replay", async () => 
   render(<App />);
 
   expect(await screen.findByText("PARTIAL_IMPROVEMENT")).toBeTruthy();
-  expect(screen.queryByRole("heading", { name: "本地 OPC-UA 模拟设备受控下发" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "检查设备执行资格" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "本地模拟设备执行" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "检查执行条件" })).toBeNull();
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
@@ -1870,9 +1873,9 @@ test("shows the sandbox boundary after SUCCESS without checking eligibility auto
   render(<App />);
 
   expect(
-    await screen.findByRole("heading", { name: "本地 OPC-UA 模拟设备受控下发" }),
+    await screen.findByRole("heading", { name: "本地模拟设备执行" }),
   ).toBeTruthy();
-  expect(screen.getByText("本地模拟设备 · 非真实生产设备")).toBeTruthy();
+  expect(screen.getByText("LOCAL OPC-UA SANDBOX / 本地模拟环境")).toBeTruthy();
   expect(
     screen.getByText(
       /当前功能仅面向本地 OPC-UA 模拟设备，连接状态以上方服务端检查为准/,
@@ -1880,8 +1883,8 @@ test("shows the sandbox boundary after SUCCESS without checking eligibility auto
   ).toBeTruthy();
   expect(screen.getByText("模拟设备连接状态待确认")).toBeTruthy();
   expect(screen.getByText(deviceEligibilityResponse().disclaimer)).toBeTruthy();
-  expect(screen.getByRole("button", { name: "检查设备执行资格" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "向模拟设备执行受控下发" })).toBeNull();
+  expect(screen.getByRole("button", { name: "检查执行条件" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "在本地模拟设备上执行" })).toBeNull();
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
@@ -1903,13 +1906,13 @@ test("keeps controlled execution disabled when server eligibility rejects it", a
   vi.stubGlobal("fetch", fetchMock);
 
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
+  fireEvent.click(await screen.findByRole("button", { name: "检查执行条件" }));
 
-  expect(await screen.findByText("设备执行资格未通过")).toBeTruthy();
+  expect(await screen.findByText("本地模拟执行条件未通过")).toBeTruthy();
   expect(screen.getByText("DEVICE_EXECUTION_DISABLED")).toBeTruthy();
   expect(screen.getByText("设备执行功能未启用")).toBeTruthy();
   expect(
-    (screen.getByRole("button", { name: "向模拟设备执行受控下发" }) as HTMLButtonElement)
+    (screen.getByRole("button", { name: "在本地模拟设备上执行" }) as HTMLButtonElement)
       .disabled,
   ).toBe(true);
   expect(screen.queryByRole("checkbox")).toBeNull();
@@ -1940,12 +1943,12 @@ test("requires independent acknowledgement and submits only controlled sandbox i
   vi.stubGlobal("fetch", fetchMock);
 
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
+  fireEvent.click(await screen.findByRole("button", { name: "检查执行条件" }));
 
-  expect(await screen.findByText("设备执行资格已通过")).toBeTruthy();
+  expect(await screen.findByText("本地模拟执行条件已通过")).toBeTruthy();
   expect(screen.getByText("pitch")).toBeTruthy();
   expect(screen.getByText("-1 tick")).toBeTruthy();
-  const executeButton = screen.getByRole("button", { name: "向模拟设备执行受控下发" });
+  const executeButton = screen.getByRole("button", { name: "在本地模拟设备上执行" });
   expect((executeButton as HTMLButtonElement).disabled).toBe(true);
 
   const acknowledgement = screen.getByRole("checkbox", {
@@ -1955,8 +1958,8 @@ test("requires independent acknowledgement and submits only controlled sandbox i
   expect((executeButton as HTMLButtonElement).disabled).toBe(false);
   fireEvent.click(executeButton);
 
-  expect(await screen.findByText("写入并回读验证成功")).toBeTruthy();
-  expect(screen.getByText("写后回读值").parentElement?.textContent).toContain("0.200000");
+  expect(await screen.findByText("本地模拟设备执行成功")).toBeTruthy();
+  expect(screen.getByText("执行后读回值").parentElement?.textContent).toContain("0.200000");
   expect(screen.getByText("a".repeat(64))).toBeTruthy();
   expect(fetchMock.mock.calls[1][0]).toBe(
     `/api/tasks/tw-demo-task-001/device-executions/eligibility?confirmed_plan_id=tw-confirmed-plan-fixed&confirmed_plan_hash=${"c".repeat(64)}`,
@@ -2000,15 +2003,15 @@ test("renders a failed readback as failure and never as success", async () => {
   vi.stubGlobal("fetch", fetchMock);
 
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
-  await screen.findByText("设备执行资格已通过");
+  fireEvent.click(await screen.findByRole("button", { name: "检查执行条件" }));
+  await screen.findByText("本地模拟执行条件已通过");
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "向模拟设备执行受控下发" }));
+  fireEvent.click(screen.getByRole("button", { name: "在本地模拟设备上执行" }));
 
   expect(await screen.findByText("写入并回读验证明确失败")).toBeTruthy();
   expect(screen.getByText("FAILED_READBACK_MISMATCH")).toBeTruthy();
-  expect(screen.getByText("写后回读值").parentElement?.textContent).toContain("0.230000");
-  expect(screen.queryByText("写入并回读验证成功")).toBeNull();
+  expect(screen.getByText("执行后读回值").parentElement?.textContent).toContain("0.230000");
+  expect(screen.queryByText("本地模拟设备执行成功")).toBeNull();
 });
 
 test("renders an execution-time qualification rejection and never as success", async () => {
@@ -2035,15 +2038,15 @@ test("renders an execution-time qualification rejection and never as success", a
   vi.stubGlobal("fetch", fetchMock);
 
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
-  await screen.findByText("设备执行资格已通过");
+  fireEvent.click(await screen.findByRole("button", { name: "检查执行条件" }));
+  await screen.findByText("本地模拟执行条件已通过");
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "向模拟设备执行受控下发" }));
+  fireEvent.click(screen.getByRole("button", { name: "在本地模拟设备上执行" }));
 
   expect(await screen.findByText("受控下发已拒绝")).toBeTruthy();
   expect(screen.getByText("DEVICE_VALUE_CHANGED")).toBeTruthy();
   expect(screen.getByText("写入次数").parentElement?.textContent).toContain("0");
-  expect(screen.queryByText("写入并回读验证成功")).toBeNull();
+  expect(screen.queryByText("本地模拟设备执行成功")).toBeNull();
 });
 
 test("renders an execution HTTP error and never as success", async () => {
@@ -2075,13 +2078,13 @@ test("renders an execution HTTP error and never as success", async () => {
   vi.stubGlobal("fetch", fetchMock);
 
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "检查设备执行资格" }));
-  await screen.findByText("设备执行资格已通过");
+  fireEvent.click(await screen.findByRole("button", { name: "检查执行条件" }));
+  await screen.findByText("本地模拟执行条件已通过");
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "向模拟设备执行受控下发" }));
+  fireEvent.click(screen.getByRole("button", { name: "在本地模拟设备上执行" }));
 
   expect(await screen.findByText("设备执行请求失败")).toBeTruthy();
   expect(screen.getByText("OPCUA_ENDPOINT_UNAVAILABLE")).toBeTruthy();
   expect(screen.getAllByText("本地 OPC-UA sandbox endpoint 当前不可用。")).toHaveLength(2);
-  expect(screen.queryByText("写入并回读验证成功")).toBeNull();
+  expect(screen.queryByText("本地模拟设备执行成功")).toBeNull();
 });

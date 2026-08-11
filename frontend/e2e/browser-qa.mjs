@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 
 const targetUrl = process.env.TUNEWISE_QA_URL ?? "http://127.0.0.1:8123";
 const outputDirectory = path.resolve(
-  process.env.TUNEWISE_QA_OUTPUT ?? "../docs/validation",
+  process.env.TUNEWISE_QA_OUTPUT ?? "../.scratch/judge-ux-qa/fixed",
 );
 const targetOrigin = new URL(targetUrl).origin;
 
@@ -86,12 +86,28 @@ async function viewportFit(page) {
       scrollWidth: root.scrollWidth,
       canScrollX: root.scrollWidth > root.clientWidth,
       offenders,
+      clippedChinese: [...document.querySelectorAll("body *")]
+        .filter((element) => {
+          const style = window.getComputedStyle(element);
+          const text = element.childElementCount === 0 ? element.textContent?.trim() ?? "" : "";
+          return (
+            /[\u3400-\u9fff]/u.test(text) &&
+            ["hidden", "clip"].includes(style.overflow) &&
+            (element.scrollWidth > element.clientWidth + 1 ||
+              element.scrollHeight > element.clientHeight + 1)
+          );
+        })
+        .slice(0, 20)
+        .map((element) => ({ tag: element.tagName, text: element.textContent?.trim() })),
     };
   });
 }
 
 async function clickAndWait(page, buttonName, result) {
-  await page.getByRole("button", { name: buttonName }).click();
+  const button = page.getByRole("button", { name: buttonName });
+  if (await button.count()) {
+    await button.click();
+  }
   await result.waitFor({ state: "visible", timeout: 60_000 });
 }
 
@@ -107,11 +123,19 @@ try {
   observe(mobilePage);
   await mobilePage.goto(targetUrl, { waitUntil: "networkidle" });
 
-  assert.equal(
-    await mobilePage.getByRole("heading", { name: "本地 OPC-UA 模拟设备受控下发" }).count(),
-    0,
-    "设备执行区不得早于成功回放出现",
-  );
+  await mobilePage.getByRole("heading", { name: "AA 工站 AI 调机决策支持" }).waitFor();
+  await mobilePage.getByText("AI 推荐", { exact: true }).waitFor();
+  await mobilePage.getByText(/未连接真实生产设备/).waitFor();
+  const mobileHeroScreenshot = path.join(outputDirectory, "fixed-hero-mobile-390.png");
+  await mobilePage.screenshot({ path: mobileHeroScreenshot, fullPage: false });
+
+  if (!await mobilePage.getByRole("heading", { name: "仿真验证结果" }).count()) {
+    assert.equal(
+      await mobilePage.getByRole("heading", { name: "本地模拟设备执行" }).count(),
+      0,
+      "设备执行区不得早于成功仿真验证出现",
+    );
+  }
 
   await clickAndWait(
     mobilePage,
@@ -126,32 +150,35 @@ try {
   await clickAndWait(
     mobilePage,
     "运行根因诊断",
-    mobilePage.getByRole("heading", { name: "Top-3 根因排查顺序" }),
+    mobilePage.getByRole("heading", { name: "根因优先级" }),
   );
   await clickAndWait(
     mobilePage,
     "检索已审核案例",
     mobilePage.getByRole("button", { name: "案例检索已完成" }),
   );
+  if (!await mobilePage.getByRole("heading", { name: "已确认调参方案" }).count()) {
+    await clickAndWait(
+      mobilePage,
+      "生成调参候选方案",
+      mobilePage.getByRole("radio", { name: /保守调整方案/ }),
+    );
+    await mobilePage.getByRole("radio", { name: /保守调整方案/ }).click();
+    await clickAndWait(
+      mobilePage,
+      "工程师确认采用",
+      mobilePage.getByRole("heading", { name: "已确认调参方案" }),
+    );
+  }
   await clickAndWait(
     mobilePage,
-    "生成安全参数候选",
-    mobilePage.getByRole("radio", { name: /CONSERVATIVE/ }),
+    "运行调参方案仿真",
+    mobilePage.getByRole("heading", { name: "仿真验证结果" }),
   );
-  await mobilePage.getByRole("radio", { name: /CONSERVATIVE/ }).click();
-  await clickAndWait(
-    mobilePage,
-    "人工确认候选方案",
-    mobilePage.getByRole("heading", { name: "方案已人工确认并冻结" }),
-  );
-  await clickAndWait(
-    mobilePage,
-    "运行离线模拟回放",
-    mobilePage.getByRole("heading", { name: "回放结果" }),
-  );
+  await mobilePage.getByText(/仅表示该参数方案在当前固定模拟条件下满足预设评价规则/).waitFor();
 
   const devicePanel = mobilePage.getByRole("heading", {
-    name: "本地 OPC-UA 模拟设备受控下发",
+    name: "本地模拟设备执行",
   });
   await devicePanel.waitFor({ state: "visible" });
   assert.equal(
@@ -165,19 +192,19 @@ try {
 
   await clickAndWait(
     mobilePage,
-    "检查设备执行资格",
-    mobilePage.getByText("设备执行资格已通过", { exact: true }),
+    "检查执行条件",
+    mobilePage.getByText("本地模拟执行条件已通过", { exact: true }),
   );
   const executeButton = mobilePage.getByRole("button", {
-    name: "向模拟设备执行受控下发",
+    name: "在本地模拟设备上执行",
   });
   assert.equal(await executeButton.isDisabled(), true, "未独立确认时执行按钮必须禁用");
   await mobilePage.getByRole("checkbox", { name: /我确认当前目标是本地 OPC-UA 模拟设备/ }).check();
   assert.equal(await executeButton.isEnabled(), true, "独立确认后才允许提交受控执行");
   await clickAndWait(
     mobilePage,
-    "向模拟设备执行受控下发",
-    mobilePage.getByText("写入并回读验证成功", { exact: true }),
+    "在本地模拟设备上执行",
+    mobilePage.getByText("本地模拟设备执行成功", { exact: true }),
   );
 
   const receiptHash = (
@@ -186,7 +213,7 @@ try {
   const actualAfter = (
     await mobilePage
       .locator(".device-receipt-grid > div")
-      .filter({ hasText: "写后回读值" })
+      .filter({ hasText: "执行后读回值" })
       .locator("dd")
       .innerText()
   ).trim();
@@ -197,6 +224,7 @@ try {
   const mobileTopFit = await viewportFit(mobilePage);
   assert.equal(mobileTopFit.canScrollX, false, JSON.stringify(mobileTopFit));
   assert.deepEqual(mobileTopFit.offenders, [], JSON.stringify(mobileTopFit));
+  assert.deepEqual(mobileTopFit.clippedChinese, [], JSON.stringify(mobileTopFit));
   const mobileTopScreenshot = path.join(
     outputDirectory,
     "opcua-sandbox-mobile-390.png",
@@ -214,6 +242,7 @@ try {
     [],
     JSON.stringify(mobileReceiptFit),
   );
+  assert.deepEqual(mobileReceiptFit.clippedChinese, [], JSON.stringify(mobileReceiptFit));
   const mobileReceiptScreenshot = path.join(
     outputDirectory,
     "opcua-sandbox-mobile-390-receipt.png",
@@ -224,18 +253,23 @@ try {
   });
 
   desktopContext = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
+    viewport: { width: 1440, height: 1100 },
   });
   const desktopPage = await desktopContext.newPage();
   observe(desktopPage);
   await desktopPage.goto(targetUrl, { waitUntil: "networkidle" });
+  await desktopPage.getByRole("heading", { name: "AA 工站 AI 调机决策支持" }).waitFor();
+  const desktopHeroScreenshot = path.join(outputDirectory, "fixed-hero-desktop-1440.png");
+  await desktopPage.screenshot({ path: desktopHeroScreenshot, fullPage: false });
   const desktopPanel = desktopPage.getByRole("heading", {
-    name: "本地 OPC-UA 模拟设备受控下发",
+    name: "本地模拟设备执行",
   });
   await desktopPanel.waitFor({ state: "visible" });
   await desktopPanel.scrollIntoViewIfNeeded();
   const desktopFit = await viewportFit(desktopPage);
   assert.equal(desktopFit.canScrollX, false, JSON.stringify(desktopFit));
+  assert.deepEqual(desktopFit.offenders, [], JSON.stringify(desktopFit));
+  assert.deepEqual(desktopFit.clippedChinese, [], JSON.stringify(desktopFit));
   const desktopScreenshot = path.join(
     outputDirectory,
     "opcua-sandbox-desktop-1440.png",
@@ -260,7 +294,7 @@ try {
       device_panel_top: mobileTopFit,
       receipt: mobileReceiptFit,
     },
-    desktop_viewport: { width: 1440, height: 900 },
+    desktop_viewport: { width: 1440, height: 1100 },
     desktop_fit: desktopFit,
     observed_http_request_count: observedRequests.length,
     external_http_request_count: externalRequests.length,
@@ -268,8 +302,10 @@ try {
     page_error_count: pageErrors.length,
     failed_request_count: failedRequests.length,
     screenshots: [
+      path.basename(mobileHeroScreenshot),
       path.basename(mobileTopScreenshot),
       path.basename(mobileReceiptScreenshot),
+      path.basename(desktopHeroScreenshot),
       path.basename(desktopScreenshot),
     ],
   };

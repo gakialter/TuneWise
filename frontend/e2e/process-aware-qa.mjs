@@ -24,9 +24,9 @@ const targetUrl = process.env.TUNEWISE_PROCESS_QA_URL ??
   "http://127.0.0.1:8000/process-aware-demo/";
 const targetOrigin = new URL(targetUrl).origin;
 const factsBoundary = [
-  "Synthetic process-context demonstration.",
-  "Demonstrates deterministic context-sensitive evidence selection.",
-  "Does not represent Sunny Optical SOP or validated production tuning accuracy.",
+  "这是合成调机过程演示。",
+  "当前演示用于证明 TuneWise 能根据不同调机过程信息选择不同的历史参考案例。",
+  "它不代表舜宇真实调机 SOP，也不证明真实生产环境中的推荐准确率。",
 ];
 const forbiddenClaims = [
   "Real AA Process",
@@ -107,6 +107,19 @@ async function viewportFit(page) {
       scrollWidth: root.scrollWidth,
       canScrollX: root.scrollWidth > root.clientWidth,
       offenders,
+      clippedChinese: [...document.querySelectorAll("body *")]
+        .filter((element) => {
+          const style = window.getComputedStyle(element);
+          const text = element.childElementCount === 0 ? element.textContent?.trim() ?? "" : "";
+          return (
+            /[\u3400-\u9fff]/u.test(text) &&
+            ["hidden", "clip"].includes(style.overflow) &&
+            (element.scrollWidth > element.clientWidth + 1 ||
+              element.scrollHeight > element.clientHeight + 1)
+          );
+        })
+        .slice(0, 20)
+        .map((element) => ({ tag: element.tagName, text: element.textContent?.trim() })),
     };
   });
 }
@@ -117,10 +130,19 @@ async function assertVisibleText(page, text, message = text) {
   assert.equal(await locator.first().isVisible(), true, `${message} is not visible.`);
 }
 
+async function scrollToTopInstantly(page) {
+  await page.evaluate(() => {
+    document.documentElement.style.scrollBehavior = "auto";
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    window.scrollTo(0, 0);
+  });
+  await page.waitForFunction(() => window.scrollY === 0);
+}
+
 async function assertSharedContent(page) {
   await page.getByTestId("scenario-comparison").waitFor({ state: "visible", timeout: 30_000 });
   assert.equal(
-    await page.getByRole("heading", { level: 1, name: "Process-aware Decision Demo" }).count(),
+    await page.getByRole("heading", { level: 1, name: "结合调机步骤的决策演示" }).count(),
     1,
     "The exact h1 must appear once.",
   );
@@ -132,13 +154,30 @@ async function assertSharedContent(page) {
     page,
     "TuneWise process-context abstractions; not industry-standard states.",
   );
-  await assertVisibleText(page, "Same measurement evidence");
-  await assertVisibleText(page, "Same root-cause ranking");
-  await assertVisibleText(page, "50-D");
+  await assertVisibleText(page, "测量数据");
+  await assertVisibleText(page, "根因判断");
+  await assertVisibleText(page, "异常数据相同");
+  await assertVisibleText(page, "调机过程不同");
+  await assertVisibleText(page, "当前适用案例不同");
+  await assertVisibleText(page, "案例参考方案不同");
 
   const sharedEvidence = page.locator(".shared-evidence");
-  assert.ok((await sharedEvidence.textContent())?.includes("PLANE_TILT"), "PLANE_TILT must be shared Top-1.");
+  assert.ok((await sharedEvidence.textContent())?.includes("pitch/roll 平面倾斜"), "Chinese Top-1 must be visible.");
   assert.ok((await sharedEvidence.textContent())?.includes("Top-1"), "Shared evidence must label Top-1.");
+
+  const englishBoundary = page.locator(".boundary-english");
+  await englishBoundary.locator("summary").click();
+  await assertVisibleText(
+    page,
+    "Synthetic process-context demonstration. Does not represent Sunny Optical SOP or validated production tuning accuracy.",
+  );
+  await englishBoundary.locator("summary").click();
+
+  const sharedTechnicalDetails = page.locator(".fingerprint-panel");
+  await sharedTechnicalDetails.locator("summary").click();
+  await assertVisibleText(page, "PLANE_TILT");
+  await assertVisibleText(page, "50 维");
+  await sharedTechnicalDetails.locator("summary").click();
 
   const comparison = page.getByTestId("scenario-comparison");
   const scenarioCards = comparison.locator(".scenario-card");
@@ -152,13 +191,13 @@ async function assertSharedContent(page) {
     "Initial Assessment",
     "初始评估",
     "INITIAL_ASSESSMENT",
-    "No previous action / outcome",
-    "Case 011",
+    "上一步调整",
+    "无",
     "tw-aa-approved-011",
     "CONTEXT_MATCH",
     "-3",
-    "Synthetic context",
-    "Synthetic profile",
+    "合成调机过程",
+    "合成案例条件",
   ]) {
     assert.ok(scenarioAText?.includes(expected), `Scenario A is missing ${expected}.`);
   }
@@ -169,25 +208,33 @@ async function assertSharedContent(page) {
     "0.250000",
     "0.200000",
     "NO_MATERIAL_IMPROVEMENT",
-    "No Material Improvement / 未观察到显著改善",
-    "Case 003",
+    "未观察到显著改善",
     "tw-aa-approved-003",
     "CONTEXT_MATCH",
     "-4",
-    "Synthetic context",
-    "Synthetic profile",
+    "合成调机过程",
+    "合成案例条件",
   ]) {
     assert.ok(scenarioBText?.includes(expected), `Scenario B is missing ${expected}.`);
   }
 
+  const scenarioTechnicalDetails = scenarioA.locator(".scenario-technical-details");
+  await scenarioTechnicalDetails.locator("summary").click();
   assert.equal(
-    await comparison.getByText("Retrieval distance, not a probability.", { exact: true }).count(),
+    await scenarioTechnicalDetails.getByText("CONTEXT_MATCH", { exact: true }).isVisible(),
+    true,
+    "Scenario reason code must be available on demand.",
+  );
+  await scenarioTechnicalDetails.locator("summary").click();
+
+  assert.equal(
+    await comparison.getByText("用于案例排序，不是概率。", { exact: true }).count(),
     2,
     "Both distances must be distinguished from probabilities.",
   );
-  await assertVisibleText(page, "CONSERVATIVE unchanged");
-  await assertVisibleText(page, "STANDARD unchanged");
-  await assertVisibleText(page, "Safety Validator unchanged");
+  await assertVisibleText(page, "保守调整方案未改变");
+  await assertVisibleText(page, "标准调整方案未改变");
+  await assertVisibleText(page, "安全校验规则未改变");
   const hashProofs = page.locator(".control-hash-proof");
   assert.equal(await hashProofs.count(), 2, "Both controls must expose A/B hash evidence.");
   for (let index = 0; index < 2; index += 1) {
@@ -237,11 +284,23 @@ try {
   const desktopFit = await viewportFit(desktopPage);
   assert.equal(desktopFit.canScrollX, false, "Desktop page must not scroll horizontally.");
   assert.deepEqual(desktopFit.offenders, [], "Desktop page has horizontal overflow offenders.");
+  assert.deepEqual(desktopFit.clippedChinese, [], "Desktop page has clipped Chinese text.");
+  await scrollToTopInstantly(desktopPage);
   await desktopPage.screenshot({
     path: path.join(outputDirectory, "process-aware-desktop-1440.png"),
-    fullPage: true,
+    fullPage: false,
   });
-  report.viewports.desktop = { width: 1440, height: 1100, fit: desktopFit };
+  await desktopPage.getByTestId("scenario-comparison").scrollIntoViewIfNeeded();
+  await desktopPage.screenshot({
+    path: path.join(outputDirectory, "process-aware-desktop-comparison-1440.png"),
+    fullPage: false,
+  });
+  report.viewports.desktop = {
+    width: 1440,
+    height: 1100,
+    fit: desktopFit,
+    screenshots: ["process-aware-desktop-1440.png", "process-aware-desktop-comparison-1440.png"],
+  };
 
   mobileContext = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -263,11 +322,23 @@ try {
   const mobileFit = await viewportFit(mobilePage);
   assert.equal(mobileFit.canScrollX, false, "Mobile page must not scroll horizontally.");
   assert.deepEqual(mobileFit.offenders, [], "Mobile page has horizontal overflow offenders.");
+  assert.deepEqual(mobileFit.clippedChinese, [], "Mobile page has clipped Chinese text.");
+  await scrollToTopInstantly(mobilePage);
   await mobilePage.screenshot({
     path: path.join(outputDirectory, "process-aware-mobile-390.png"),
-    fullPage: true,
+    fullPage: false,
   });
-  report.viewports.mobile = { width: 390, height: 844, fit: mobileFit };
+  await mobilePage.getByTestId("scenario-comparison").scrollIntoViewIfNeeded();
+  await mobilePage.screenshot({
+    path: path.join(outputDirectory, "process-aware-mobile-comparison-390.png"),
+    fullPage: false,
+  });
+  report.viewports.mobile = {
+    width: 390,
+    height: 844,
+    fit: mobileFit,
+    screenshots: ["process-aware-mobile-390.png", "process-aware-mobile-comparison-390.png"],
+  };
 
   assert.ok(
     observations.observedRequests.some(({ url }) =>

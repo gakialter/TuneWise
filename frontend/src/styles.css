@@ -320,6 +320,68 @@ a:focus-visible,
   text-wrap: pretty;
 }
 
+.judge-flow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.judge-flow li {
+  min-width: 0;
+  padding: var(--space-3);
+  border-top: 2px solid var(--accent);
+  background: var(--surface-subtle);
+}
+
+.judge-flow li > span,
+.judge-flow li > strong,
+.judge-flow li > small {
+  display: block;
+}
+
+.judge-flow li > span {
+  color: var(--accent-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.judge-flow li > strong {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.judge-flow li > small {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.hero-boundary {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--warning, #a36f2d);
+  background: #f6f0e7;
+  color: var(--text);
+  font-weight: 620;
+  line-height: 1.55;
+}
+
+.task-summary dd small,
+.device-status-grid dd small,
+.device-receipt-grid dd small,
+.replay-status small {
+  display: block;
+  margin-top: var(--space-1);
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  opacity: 0.72;
+}
+
 .task-summary {
   display: grid;
   grid-template-columns: 0.8fr 1.2fr 1fr;
@@ -703,14 +765,14 @@ a:focus-visible,
 }
 
 .detection-binding {
-  display: flex;
+  display: block;
   flex: 0 0 auto;
-  flex-direction: column;
-  gap: var(--space-2);
-  align-items: flex-end;
+  min-width: 13rem;
 }
 
 .detection-binding code {
+  display: block;
+  margin: var(--space-2) var(--space-3);
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
@@ -2273,6 +2335,74 @@ dd {
   letter-spacing: 0.04em;
 }
 
+.replay-status {
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.score-boundary {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4);
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-weight: 620;
+}
+
+.technical-details {
+  margin-top: var(--space-4);
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+}
+
+.technical-details > summary {
+  padding: var(--space-3) var(--space-4);
+  color: var(--accent-strong);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.technical-details[open] > summary {
+  border-bottom: var(--border-subtle);
+}
+
+.technical-details .diagnosis-footer-grid,
+.technical-details .planning-version-grid,
+.technical-details .case-source-versions,
+.technical-details .hash-summary,
+.technical-details .replay-result-meta {
+  margin: 0;
+  padding: var(--space-4);
+}
+
+.compact-technical-details {
+  margin-top: var(--space-3);
+}
+
+.compact-technical-details > summary {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.technical-hash,
+.technical-details .candidate-hash {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-4);
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.replay-technical-details {
+  margin: 0 var(--space-6) var(--space-6);
+}
+
+.replay-technical-details .replay-result-meta {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .replay-status-success,
 .check-passed {
   color: var(--accent-strong);
@@ -2677,6 +2807,12 @@ dd {
     gap: var(--space-5);
   }
 
+  .judge-flow {
+    grid-template-columns: repeat(5, minmax(7rem, 1fr));
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+  }
+
   .stage-list {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     row-gap: var(--space-5);
@@ -2767,6 +2903,24 @@ dd {
     padding-top: var(--space-4);
   }
 
+  .judge-flow {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .judge-flow li {
+    display: grid;
+    grid-template-columns: 1.5rem minmax(6.5rem, auto) minmax(0, 1fr);
+    gap: var(--space-2);
+    align-items: baseline;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .judge-flow li > strong,
+  .judge-flow li > small {
+    margin-top: 0;
+  }
+
   .task-overview,
   .import-intro,
   .detection-intro,
@@ -2835,6 +2989,11 @@ dd {
   .device-execution-confirmation,
   .device-disclaimer,
   .device-inline-message {
+    margin-right: var(--space-5);
+    margin-left: var(--space-5);
+  }
+
+  .replay-technical-details {
     margin-right: var(--space-5);
     margin-left: var(--space-5);
   }
