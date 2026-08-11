@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.process-aware.tsbuildinfo"
+  },
+  "include": ["process-aware/src"]
+}

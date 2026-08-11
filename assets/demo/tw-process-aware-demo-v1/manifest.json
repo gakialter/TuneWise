@@ -1,0 +1,10 @@
+{
+  "manifest_version": "1",
+  "demo_version": "tw-process-aware-demo-v1",
+  "fixture_version": "tw-process-aware-demo-fixture-v1",
+  "source_kind": "SYNTHETIC_TEST_FIXTURE",
+  "synthetic": true,
+  "files": {
+    "process-aware-demo.json": "37040a7b264d72e0bac89f8bfb299223a621d2fc255c2f783b47608f69f68201"
+  }
+}

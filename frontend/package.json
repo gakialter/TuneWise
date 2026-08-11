@@ -4,9 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && npm run build:process-aware-demo",
+    "build:process-aware-demo": "tsc -p tsconfig.process-aware.json && vite build --config vite.process-aware.config.ts",
     "test": "vitest run",
-    "qa:browser": "node e2e/browser-qa.mjs"
+    "qa:browser": "node e2e/browser-qa.mjs",
+    "qa:process-aware": "node e2e/process-aware-qa.mjs"
   },
   "dependencies": {
     "react": "19.2.5",

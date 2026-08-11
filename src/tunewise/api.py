@@ -24,6 +24,7 @@ from .parameter_planning import (
     ParameterPlanningAssetError,
     ParameterPlanningGuardError,
 )
+from .process_aware_demo import ProcessAwareDemoService
 from .plan_confirmation import PlanConfirmationGuardError
 from .replay import ReplayBoundaryAudit, ReplayGuardError
 from .device_execution import (
@@ -102,12 +103,16 @@ def create_app(
     expected_replay_manifest_hash: str | None = None,
     device_execution_config: DeviceExecutionConfig | None = None,
     opcua_gateway: OpcUaGateway | None = None,
+    process_aware_demo_asset_root: Path | None = None,
+    expected_process_aware_demo_manifest_hash: str | None = None,
+    process_aware_demo_static_root: Path | None = None,
 ) -> FastAPI:
     boundary_audit = PlanningBoundaryAudit()
     replay_boundary_audit = ReplayBoundaryAudit()
     store = TaskStore(database_path)
+    public_asset_loader = PublicAssetLoader(public_asset_root, expected_manifest_hash)
     service = TaskService(
-        asset_loader=PublicAssetLoader(public_asset_root, expected_manifest_hash),
+        asset_loader=public_asset_loader,
         store=store,
         demo_asset_root=demo_asset_root,
         expected_dataset_manifest_hash=expected_dataset_manifest_hash,
@@ -122,6 +127,45 @@ def create_app(
         expected_replay_manifest_hash=expected_replay_manifest_hash,
         replay_boundary_audit=replay_boundary_audit,
     )
+    process_aware_configuration = (
+        process_aware_demo_asset_root,
+        expected_process_aware_demo_manifest_hash,
+    )
+    if any(item is not None for item in process_aware_configuration) and not all(
+        item is not None for item in process_aware_configuration
+    ):
+        raise ValueError(
+            "Process-aware demo asset root and trusted manifest hash must be configured together."
+        )
+    process_aware_demo_service: ProcessAwareDemoService | None = None
+    if all(item is not None for item in process_aware_configuration):
+        required_source_configuration = (
+            demo_asset_root,
+            expected_dataset_manifest_hash,
+            diagnostic_asset_root,
+            expected_diagnostic_manifest_hash,
+            case_asset_root,
+            expected_case_manifest_hash,
+            planning_asset_root,
+            expected_planning_manifest_hash,
+        )
+        if any(item is None for item in required_source_configuration):
+            raise ValueError(
+                "Process-aware demo requires the frozen dataset, diagnostic, case, and planning assets."
+            )
+        process_aware_demo_service = ProcessAwareDemoService(
+            public_asset_loader=public_asset_loader,
+            fixture_root=process_aware_demo_asset_root,
+            expected_fixture_manifest_hash=expected_process_aware_demo_manifest_hash,
+            demo_asset_root=demo_asset_root,
+            expected_dataset_manifest_hash=expected_dataset_manifest_hash,
+            diagnostic_asset_root=diagnostic_asset_root,
+            expected_diagnostic_manifest_hash=expected_diagnostic_manifest_hash,
+            case_asset_root=case_asset_root,
+            expected_case_manifest_hash=expected_case_manifest_hash,
+            planning_asset_root=planning_asset_root,
+            expected_planning_manifest_hash=expected_planning_manifest_hash,
+        )
     execution_config = device_execution_config or DeviceExecutionConfig.from_env()
     device_execution_service = DeviceExecutionService(
         config=execution_config,
@@ -660,6 +704,27 @@ def create_app(
         if receipt is None or receipt.task_id != task_id:
             raise HTTPException(status_code=404, detail="设备执行凭证不存在。")
         return {"receipt": asdict(receipt)}
+
+    if process_aware_demo_service is not None:
+        @app.get("/api/demos/process-aware")
+        def get_process_aware_demo() -> dict:
+            boundary_audit.assert_pristine()
+            replay_counters_before = dict(replay_boundary_audit.counters)
+            try:
+                return process_aware_demo_service.get_demo()
+            finally:
+                boundary_audit.assert_pristine()
+                if replay_boundary_audit.counters != replay_counters_before:
+                    raise RuntimeError(
+                        "Process-aware demo crossed the replay isolation boundary."
+                    )
+
+    if process_aware_demo_static_root is not None:
+        app.mount(
+            "/process-aware-demo",
+            StaticFiles(directory=process_aware_demo_static_root, html=True),
+            name="process-aware-demo",
+        )
 
     if static_root is not None:
         app.mount("/", StaticFiles(directory=static_root, html=True), name="frontend")

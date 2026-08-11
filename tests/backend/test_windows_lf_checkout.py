@@ -38,8 +38,10 @@ def _hashes(root: Path) -> dict[str, str]:
 
 def test_core_autocrlf_checkout_and_rebuild_preserve_hashed_assets() -> None:
     source_static = ROOT / "src" / "tunewise" / "static"
+    source_process_static = ROOT / "src" / "tunewise" / "process_aware_demo_static"
     source_public = ROOT / "assets" / "public"
     source_static_hashes = _hashes(source_static)
+    source_process_static_hashes = _hashes(source_process_static)
     source_public_hashes = _hashes(source_public)
 
     # Keeping this temporary hierarchy inside the ignored node_modules tree
@@ -64,11 +66,21 @@ def test_core_autocrlf_checkout_and_rebuild_preserve_hashed_assets() -> None:
             "tsconfig.json",
             "tsconfig.app.json",
             "tsconfig.node.json",
+            "tsconfig.process-aware.json",
+            "vite.process-aware.config.ts",
         ):
             shutil.copy2(ROOT / "frontend" / name, seed / "frontend" / name)
         shutil.copytree(ROOT / "frontend" / "src", seed / "frontend" / "src")
         shutil.copytree(ROOT / "frontend" / "public", seed / "frontend" / "public")
+        shutil.copytree(
+            ROOT / "frontend" / "process-aware",
+            seed / "frontend" / "process-aware",
+        )
         shutil.copytree(source_static, seed / "src" / "tunewise" / "static")
+        shutil.copytree(
+            source_process_static,
+            seed / "src" / "tunewise" / "process_aware_demo_static",
+        )
         shutil.copytree(source_public, seed / "assets" / "public")
 
         _run("git", "init", "-q", cwd=seed)
@@ -90,15 +102,21 @@ def test_core_autocrlf_checkout_and_rebuild_preserve_hashed_assets() -> None:
         )
 
         checked_static = checkout / "src" / "tunewise" / "static"
+        checked_process_static = (
+            checkout / "src" / "tunewise" / "process_aware_demo_static"
+        )
         checked_public = checkout / "assets" / "public"
         assert _hashes(checked_static) == source_static_hashes
+        assert _hashes(checked_process_static) == source_process_static_hashes
         assert _hashes(checked_public) == source_public_hashes
-        for path in checked_static.rglob("*"):
-            if path.suffix in {".css", ".js", ".html", ".json", ".svg"}:
-                assert b"\r\n" not in path.read_bytes(), path
+        for checked_root in (checked_static, checked_process_static):
+            for path in checked_root.rglob("*"):
+                if path.suffix in {".css", ".js", ".html", ".json", ".svg"}:
+                    assert b"\r\n" not in path.read_bytes(), path
 
         _run("npm.cmd", "run", "build", cwd=checkout / "frontend")
         assert _hashes(checked_static) == source_static_hashes
+        assert _hashes(checked_process_static) == source_process_static_hashes
         assert _run("git", "status", "--porcelain", cwd=checkout).stdout == ""
 
         index = (checked_static / "index.html").read_text(encoding="utf-8")

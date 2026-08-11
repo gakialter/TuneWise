@@ -1,0 +1,139 @@
+{
+  "fixture_version": "tw-process-aware-demo-fixture-v1",
+  "demo_version": "tw-process-aware-demo-v1",
+  "title": "Process-aware Decision Demo",
+  "facts_boundary": "Synthetic process-context demonstration.\nDemonstrates deterministic context-sensitive evidence selection.\nDoes not represent Sunny Optical SOP or validated production tuning accuracy.",
+  "abstraction_note": "TuneWise process-context abstractions; not industry-standard states.",
+  "source_kind": "SYNTHETIC_TEST_FIXTURE",
+  "synthetic": true,
+  "asset_bindings": {
+    "dataset": {
+      "asset_id": "tw-aa-demo-v1",
+      "manifest_hash": "d66077f880e6d4c470772be30a771ca20d26520ab39c08fc4f4340fa4e31950c",
+      "measurement_hash": "c74206387e06287d6c11ee8a4c6cc46cae867e6967f0c790f5dfe2f5ef940668",
+      "query_feature_hash": "7fa3c96138dbeb938466fcd12b00b2b8c1a9fcb61ee78dcad77f29a545462040"
+    },
+    "diagnostic": {
+      "manifest_hash": "d2d287fcd830771c3b8c6e91f41152d950ea2a02820107c1ca802fb268b5ed4b",
+      "model_version": "tw-model-v1",
+      "preprocessing_version": "tw-preprocessing-v1",
+      "feature_definition_version": "tw-feature-definition-v1",
+      "ordered_top3_root_causes": [
+        "PLANE_TILT",
+        "XY_DECENTER",
+        "REFERENCE_DRIFT"
+      ]
+    },
+    "cases": {
+      "manifest_hash": "3259575b170a617a9314a7c6883d829b64df9a022be7a90529bf7e50db7acb81",
+      "approved_case_count": 60,
+      "case_index_hash": "a97ecb3790741390f6eb87ba3e47af863090338d48dfbb641dfd6a1593661755",
+      "scaler_version": "tw-case-retrieval-scaler-v1"
+    },
+    "planning": {
+      "manifest_hash": "fc73d61a29bcfbe89ab3b8f34cd0cf7436ff10c0716c59be8882b21be2881f4b",
+      "planning_rule_version": "tw-parameter-planning-v1",
+      "safety_rule_version": "tw-parameter-safety-v1"
+    }
+  },
+  "contexts": [
+    {
+      "scenario_id": "A",
+      "schema_version": "tw-process-context-v1",
+      "process_stage": "INITIAL_ASSESSMENT",
+      "iteration_index": 0,
+      "previous_measurement_hash": null,
+      "previous_action": null,
+      "previous_action_outcome": null,
+      "outcome_rule_version": null,
+      "provenance": {
+        "source_kind": "SYNTHETIC_TEST_FIXTURE",
+        "source_refs": [
+          "tw-process-aware-demo-v1:scenario-A"
+        ],
+        "source_hashes": [
+          "e7e7fcc98b6ddc94fce549eec21aed540fd48372dc4a2e98c3012f10938f7225"
+        ],
+        "actor_id": "synthetic-process-aware-demo-v1",
+        "recorded_at": "2026-08-11T00:00:00+08:00"
+      },
+      "context_hash": "125937228baf4e3a145e343309ef9e9cc7d6aeb20d0b717ebad3031daeab28f6"
+    },
+    {
+      "scenario_id": "B",
+      "schema_version": "tw-process-context-v1",
+      "process_stage": "POST_ADJUSTMENT_EVALUATION",
+      "iteration_index": 1,
+      "previous_measurement_hash": "c74206387e06287d6c11ee8a4c6cc46cae867e6967f0c790f5dfe2f5ef940668",
+      "previous_action": {
+        "parameter_name": "pitch",
+        "before_value": "0.250000",
+        "after_value": "0.200000",
+        "delta_ticks": -1,
+        "action_version": "tw-approved-case-action-v1",
+        "confirmed_plan_id": null,
+        "confirmed_plan_hash": null,
+        "execution_receipt_id": null,
+        "execution_receipt_hash": null
+      },
+      "previous_action_outcome": "NO_MATERIAL_IMPROVEMENT",
+      "outcome_rule_version": "tw-synthetic-process-outcome-v1",
+      "provenance": {
+        "source_kind": "SYNTHETIC_TEST_FIXTURE",
+        "source_refs": [
+          "tw-process-aware-demo-v1:scenario-B"
+        ],
+        "source_hashes": [
+          "99b5b316ce21e55793baeac7a454b6913cd9c389db6862356d9f750ceccdbdd7"
+        ],
+        "actor_id": "synthetic-process-aware-demo-v1",
+        "recorded_at": "2026-08-11T00:00:00+08:00"
+      },
+      "context_hash": "765e6d2af105ef6e9429654125b95385f8b2788d457fb12cd5744852ad99c7e0"
+    }
+  ],
+  "case_process_profiles": [
+    {
+      "case_id": "tw-aa-approved-011",
+      "process_profile_schema_version": "tw-case-process-profile-v1",
+      "compatible_process_stage": "INITIAL_ASSESSMENT",
+      "previous_action_parameter": null,
+      "previous_action_outcome": null,
+      "minimum_iteration": 0,
+      "maximum_iteration": 0,
+      "profile_provenance": {
+        "source_kind": "SYNTHETIC_TEST_FIXTURE",
+        "source_refs": [
+          "tw-process-aware-demo-v1:profile:tw-aa-approved-011"
+        ],
+        "source_hashes": [
+          "245816f7d1daac4e03108d1167b01b78c3372c302aa5d38e782b099dc9502c03"
+        ],
+        "actor_id": "synthetic-process-aware-demo-v1",
+        "recorded_at": "2026-08-11T00:00:00+08:00"
+      },
+      "profile_hash": "d32cb2acd5026f587d79e61b8e6829740076832a509e0d7154c364c1a86b06c6"
+    },
+    {
+      "case_id": "tw-aa-approved-003",
+      "process_profile_schema_version": "tw-case-process-profile-v1",
+      "compatible_process_stage": "POST_ADJUSTMENT_EVALUATION",
+      "previous_action_parameter": "pitch",
+      "previous_action_outcome": "NO_MATERIAL_IMPROVEMENT",
+      "minimum_iteration": 1,
+      "maximum_iteration": 1,
+      "profile_provenance": {
+        "source_kind": "SYNTHETIC_TEST_FIXTURE",
+        "source_refs": [
+          "tw-process-aware-demo-v1:profile:tw-aa-approved-003"
+        ],
+        "source_hashes": [
+          "4407bb16947cbebecdcb0baeb352c60228fe1eab5692463fe9a50d2677878b8b"
+        ],
+        "actor_id": "synthetic-process-aware-demo-v1",
+        "recorded_at": "2026-08-11T00:00:00+08:00"
+      },
+      "profile_hash": "3fd8dd44abb6b65e2eabba02443ec996dee6171d501d1095463fff20f8bd4e05"
+    }
+  ]
+}
