@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img">
+<defs>
+<linearGradient id="accent" x1="0" x2="1">
+<stop offset="0" stop-color="#355CFF"/>
+<stop offset=".52" stop-color="#6F5CE7"/>
+<stop offset="1" stop-color="#0C9A9A"/>
+</linearGradient>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+<feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#1C3355" flood-opacity=".09"/>
+</filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#33445E"/>
+</marker>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#355CFF"/>
+</marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#16885B"/>
+</marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#C94242"/>
+</marker>
+<marker id="arrow-orange" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#D97706"/>
+</marker>
+</defs>
+<rect x="0" y="0" width="1920" height="1080" rx="0" fill="#F4F7FB" stroke="none" stroke-width="1" opacity="1"/>
+<rect x="0" y="0" width="1920" height="12" rx="0" fill="url(#accent)" stroke="none" stroke-width="1" opacity="1"/>
+<text x="72" y="72" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="42" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">飞书 Aily 工程解释工作流</text>
+<text x="74" y="126" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">基于 8 文件版本化知识包，通过知识检索（RAG）与大语言模型生成有证据边界的工程解释</text>
+<rect x="1615" y="48" width="235" height="56" rx="28" fill="#10233F" stroke="none" stroke-width="1" opacity="1"/>
+<text x="1732" y="76" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">TuneWise · 图 07</text>
+<line x1="72" y1="166" x2="1848" y2="166" stroke="#D7DEEA" stroke-width="2" stroke-linecap="round" opacity="1"/>
+<rect x="70" y="205" width="1040" height="760" rx="18" fill="#FBFAFF" stroke="#D0C8F5" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="110" y="242" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="27" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">有证据边界的工程解释工作流</text>
+<rect x="775" y="222" width="290" height="38" rx="19" fill="#FFFFFF" stroke="#CFC6F3" stroke-width="1.5" opacity="1"/>
+<text x="920.0" y="241" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">工作流逻辑示意</text>
+<rect x="250" y="288" width="680" height="76" rx="15" fill="#FFFFFF" stroke="#D5DDE9" stroke-width="1.7" opacity="1"/>
+<text x="590.0" y="314.0" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">评委 / 工程师提问</text>
+<text x="590.0" y="348.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">自然语言问题</text>
+<line x1="590" y1="366" x2="590" y2="384" stroke="#6F5CE7" stroke-width="2.6" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="250" y="392" width="680" height="76" rx="15" fill="#FFFFFF" stroke="#D5DDE9" stroke-width="1.7" opacity="1"/>
+<text x="590.0" y="418.0" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">开始</text>
+<text x="590.0" y="452.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">输入用户问题</text>
+<line x1="590" y1="470" x2="590" y2="488" stroke="#6F5CE7" stroke-width="2.6" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="250" y="496" width="680" height="76" rx="15" fill="#F0EDFF" stroke="#C7BDF1" stroke-width="1.7" opacity="1"/>
+<text x="590.0" y="522.0" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">知识检索（RAG）</text>
+<text x="590.0" y="556.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">Top K = 5 · threshold off</text>
+<line x1="590" y1="574" x2="590" y2="592" stroke="#6F5CE7" stroke-width="2.6" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="250" y="600" width="680" height="76" rx="15" fill="#FFFFFF" stroke="#D5DDE9" stroke-width="1.7" opacity="1"/>
+<text x="590.0" y="626.0" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">TuneWise 工程知识</text>
+<text x="590.0" y="660.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">版本化项目知识 + 固定演示证据</text>
+<line x1="590" y1="678" x2="590" y2="696" stroke="#6F5CE7" stroke-width="2.6" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="250" y="704" width="680" height="76" rx="15" fill="#F0EDFF" stroke="#C7BDF1" stroke-width="1.7" opacity="1"/>
+<text x="590.0" y="730.0" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">大语言模型（LLM）</text>
+<text x="590.0" y="764.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">基于检索结果组织回答</text>
+<line x1="590" y1="782" x2="590" y2="800" stroke="#6F5CE7" stroke-width="2.6" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="250" y="808" width="680" height="76" rx="15" fill="#FFFFFF" stroke="#D5DDE9" stroke-width="1.7" opacity="1"/>
+<text x="590.0" y="834.0" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">工程解释</text>
+<text x="590.0" y="868.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">检索 · 解释 · 追溯 · 问答</text>
+<rect x="1150" y="205" width="700" height="760" rx="18" fill="#FFFFFF" stroke="#C4CFE6" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="1190" y="242" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="27" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">8 文件知识包</text>
+<text x="1190" y="280" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">TuneWise Engineering Knowledge · 8 / 8 已启用</text>
+<rect x="1190" y="306" width="620" height="44" rx="11" fill="#F8FAFE" stroke="#D6DEEA" stroke-width="1.5" opacity="1"/>
+<circle cx="1221" cy="328" r="15" fill="#355CFF" stroke="none" stroke-width="1"/>
+<text x="1221" y="328" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">01</text>
+<text x="1252" y="328" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">项目概览</text>
+<rect x="1190" y="361" width="620" height="44" rx="11" fill="#F8FAFE" stroke="#D6DEEA" stroke-width="1.5" opacity="1"/>
+<circle cx="1221" cy="383" r="15" fill="#355CFF" stroke="none" stroke-width="1"/>
+<text x="1221" y="383" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">02</text>
+<text x="1252" y="383" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">架构与双层 AI</text>
+<rect x="1190" y="416" width="620" height="44" rx="11" fill="#F8FAFE" stroke="#D6DEEA" stroke-width="1.5" opacity="1"/>
+<circle cx="1221" cy="438" r="15" fill="#355CFF" stroke="none" stroke-width="1"/>
+<text x="1221" y="438" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">03</text>
+<text x="1252" y="438" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">诊断与参数安全</text>
+<rect x="1190" y="471" width="620" height="44" rx="11" fill="#F8FAFE" stroke="#D6DEEA" stroke-width="1.5" opacity="1"/>
+<circle cx="1221" cy="493" r="15" fill="#355CFF" stroke="none" stroke-width="1"/>
+<text x="1221" y="493" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">04</text>
+<text x="1252" y="493" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">执行前仿真验证与 OPC-UA 安全</text>
+<rect x="1190" y="526" width="620" height="44" rx="11" fill="#F8FAFE" stroke="#D6DEEA" stroke-width="1.5" opacity="1"/>
+<circle cx="1221" cy="548" r="15" fill="#355CFF" stroke="none" stroke-width="1"/>
+<text x="1221" y="548" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">05</text>
+<text x="1252" y="548" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">固定 Demo 证据</text>
+<rect x="1190" y="581" width="620" height="44" rx="11" fill="#F8FAFE" stroke="#D6DEEA" stroke-width="1.5" opacity="1"/>
+<circle cx="1221" cy="603" r="15" fill="#355CFF" stroke="none" stroke-width="1"/>
+<text x="1221" y="603" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">06</text>
+<text x="1252" y="603" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">事实边界与 FAQ</text>
+<rect x="1190" y="636" width="620" height="44" rx="11" fill="#F8FAFE" stroke="#D6DEEA" stroke-width="1.5" opacity="1"/>
+<circle cx="1221" cy="658" r="15" fill="#355CFF" stroke="none" stroke-width="1"/>
+<text x="1221" y="658" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">07</text>
+<text x="1252" y="658" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">评委指南</text>
+<rect x="1190" y="691" width="620" height="44" rx="11" fill="#F8FAFE" stroke="#D6DEEA" stroke-width="1.5" opacity="1"/>
+<circle cx="1221" cy="713" r="15" fill="#355CFF" stroke="none" stroke-width="1"/>
+<text x="1221" y="713" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">08</text>
+<text x="1252" y="713" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">调机过程 Demo 证据</text>
+<rect x="1190" y="760" width="295" height="66" rx="14" fill="#E7F5EE" stroke="#A4D1B9" stroke-width="1.5" opacity="1"/>
+<text x="1337.5" y="781" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">知识包</text>
+<text x="1337.5" y="806" fill="#16885B" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="17.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">8 / 8</text>
+<rect x="1505" y="760" width="305" height="66" rx="14" fill="#E7F5EE" stroke="#A4D1B9" stroke-width="1.5" opacity="1"/>
+<text x="1657.5" y="781" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">原有安全硬门禁</text>
+<text x="1657.5" y="806" fill="#16885B" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="17.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<rect x="1190" y="838" width="295" height="66" rx="14" fill="#E7F5EE" stroke="#A4D1B9" stroke-width="1.5" opacity="1"/>
+<text x="1337.5" y="859" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">调机过程问答（Process-aware QA）</text>
+<text x="1337.5" y="884" fill="#16885B" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="17.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<rect x="1505" y="838" width="305" height="66" rx="14" fill="#E7F5EE" stroke="#A4D1B9" stroke-width="1.5" opacity="1"/>
+<text x="1657.5" y="859" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">发布环境</text>
+<text x="1657.5" y="884" fill="#16885B" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="17.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<rect x="1150" y="925" width="700" height="40" rx="12" fill="#FCEBEC" stroke="#EEC4C7" stroke-width="1" opacity="1"/>
+<text x="1500" y="945" fill="#C94242" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">固定 / 版本化证据 RAG · 无实时控制权限</text>
+<text x="74" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">人工 UI / 会话验收：8/8 · Legacy Safety PASS · Process-aware QA PASS · Published PASS</text>
+<text x="1848" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="end" dominant-baseline="middle" opacity="1">40 强最终参赛方案 · 2026-08-11</text>
+</svg>

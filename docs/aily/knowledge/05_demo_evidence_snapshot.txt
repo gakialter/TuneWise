@@ -1,0 +1,161 @@
+# 固定 Demo Evidence Snapshot
+
+## Evidence identity
+
+- Task ID：`tw-demo-task-001`
+- Preset asset：`tw-aa-demo-v1`
+- Batch ID：`tw-aa-demo-batch-001`
+- Data domain：规则约束的 synthetic AA prototype data；不是舜宇真实数据。
+- Station：`AA`
+- Product model：`TW-AA-PROTOTYPE-V1`
+- Sample count：`24`
+- 审计基线 commit：`706f562502439ab2f998ae43cebf75a1f2c586e1`
+
+## Anomaly result
+
+- Result：`TARGET_ANOMALY`
+- Persistence：24/24 samples violate current route signal；ratio `1.000000`；maximum consecutive violations `24`。
+- Center MTF mean：`0.831003`
+- Worst corner MTF：`0.567683`
+- Corner MTF range：`0.184837`
+- Corner MTF std：`0.071709`
+
+## Top root causes
+
+1. `PLANE_TILT` — normalized score `0.997781`；adjustability `ADJUSTABLE`。
+2. `XY_DECENTER` — normalized score `0.001454`；adjustability `ADJUSTABLE`。
+3. `REFERENCE_DRIFT` — normalized score `0.000534`；adjustability `INSPECTION_ONLY`。
+
+`Z_DEFOCUS_CONDITIONAL` 因 Z gate 的 center-near-lower-limit、corners-global-low 和 asymmetry-not-dominant 三项均未通过而被移除。
+
+这些 score 是对当前可见根因集合重新归一化后的相对排序 score。**Score is not a calibrated fault probability.** 不得解释成 99.7781% 的真实故障概率或置信度。
+
+`PLANE_TILT` 的关键工程证据包括 `top_bottom_difference=0.132913`、`left_right_difference=0.014371`、`diagonal_difference=-0.051924`、`pitch_mean=0.250000` 和 `roll_mean=-0.200000`。主要正向 logit contributions 包括 diagonal difference `0.906158`、pitch mean `0.878717`、roll mean `0.820375` 和 top-bottom difference `0.793853`。
+
+## APPROVED case evidence
+
+结构化检索返回三个 `PLANE_TILT` cases：
+
+1. `tw-aa-approved-011`，distance `4.442915`。
+2. `tw-aa-approved-001`，distance `4.616628`。
+3. `tw-aa-approved-002`，distance `4.687458`。
+
+它们属于 `tw-approved-case-index-v1` 的 synthetic development training cases。`APPROVED` 是项目内索引准入状态，不是专家 ground truth、真实产线验证或生产有效性证明。
+
+## Selected parameter candidate
+
+- Candidate ID：`tw-parameter-candidate-2b7c09c86136ee11`
+- Parameter：`pitch`
+- Current value：`0.250000`
+- Target value：`0.200000`
+- Delta：`-0.050000`，即 `-1` tick
+- Engineering unit：`Normalized Angular Unit`
+- Strategy：`CONSERVATIVE`
+- Parameter family：`PITCH_ROLL`
+- Validation：`PASSED`
+
+## Direction evidence
+
+- Rule：`PLANE_TILT_PITCH_SAME_SIGN`
+- Feature：`top_bottom_difference=0.132913`
+- Minimum spatial support：`0.040000`
+- Current pitch：`0.250000`，nominal：`0.000000`
+- Recommended direction：`DECREASE`
+- Conflict status：`NO_CONFLICT`
+- Direction evidence hash：`5e21015428a889ac9f06b8eb94529558044537556ed9a0bb972240ae2306f1fe`
+
+方向为负是因为固定规则将 `PLANE_TILT` 的 pitch 方向设为与 `top_bottom_difference` 同号；当前该特征为正，而安全调整必须减少到标称值的偏差，因此生成 `DECREASE`，且不得跨过标称值。
+
+## Magnitude evidence
+
+已选择候选的幅值来自 `tw-parameter-planning-v1` 的 `CONSERVATIVE=1 tick`；tick size 为 `0.050000`。该候选 `supporting_case_ids=[]`，因此本次已确认的 1 tick 幅值不是从案例中计算出来的。
+
+同一规划结果还真实生成 `STANDARD=-2 ticks` 和 `CASE_GUIDED=-3 ticks` 两个通过校验的备选；`CASE_GUIDED` 的中位数证据来自 `tw-aa-approved-001`、`002`、`011`。它们没有被本次 ConfirmedPlan 选择。
+
+## Parameter safety validation
+
+已选择候选通过 `tw-parameter-safety-v1` 的范围、grid、非零变化、参数数量、单一参数族、Top-1 允许族、方向证据存在/无冲突/完整性、方向匹配、减少标称偏差、不跨标称值、最大单次变化、tick/delta、版本绑定和 candidate hash 检查。
+
+固定 pitch 约束：nominal `0.000000`，range `[-1.000000, 1.000000]`，step `0.050000`，maximum single plan delta `0.200000`。
+
+## ConfirmedPlan
+
+- ConfirmedPlan ID：`tw-confirmed-plan-936e9f41d9e41a72`
+- Version：`tw-confirmed-plan-v1`
+- Status：`VALID`
+- Candidate hash：`2b7c09c86136ee117229d8cfdf66494bcc976af9a1d31afd6c71b22430ed97a2`
+- ConfirmedPlan hash：`c7b610a3d9c287ed6a71b002067ef4b8b26dee3712ec6484a2ac80c273ee3c06`
+- Actor role：`AA_PROCESS_ENGINEER`
+
+ConfirmedPlan 不可变，并绑定当前数据、参数、检测、诊断、检索、规划、规则、模型、Scaler、约束与资产 hashes。上述 ID/hash 是由固定资产确定性重建得到的业务内容标识；时间字段不进入这些内容 hash。
+
+## Replay
+
+- ReplayResult ID：`tw-replay-result-e639cf3f2e69e217`
+- Replay status：`SUCCESS`
+- Attempt count：`1`
+- Baseline reproduction：`PASSED`
+- Imported baseline canonical hash = simulated baseline canonical hash：`c74206387e06287d6c11ee8a4c6cc46cae867e6967f0c790f5dfe2f5ef940668`
+
+关键 before → after：
+
+- Center MTF mean：`0.831003 → 0.832128`
+- Worst corner MTF：`0.567683 → 0.651478`
+- Corner range：`0.184837 → 0.102292`
+- Corner std：`0.071709 → 0.042654`
+- Control limit pass：`false → true`
+- Target anomaly triggered：`true → false`
+
+ReplayResult hash：`e639cf3f2e69e217338f0f7e96ecabfa45523ca7d92ab45a320eb2b3b1435350`。
+
+**Replay result does not demonstrate production yield improvement.** `SUCCESS` 只表示固定 `tw-simulator-v1`、固定场景、固定扰动、固定 seed 和 `tw-evaluation-v1` 下的离线模拟检查通过，不证明真实产线良率、生产收益、真实设备效果、因果关系或参数最优。
+
+## Device execution evidence
+
+仓库固定浏览器 QA 证据 `docs/validation/browser-qa-evidence.json` 记录了同一固定演示参数变化在本地 `LOCAL_OPCUA_SANDBOX` 上的受控执行：
+
+- Execution status：`SUCCEEDED`
+- Parameter flow：`pitch 0.250000 → 0.200000`
+- Actual after readback：`0.200000`
+- Receipt hash：`42d056b794e05c96da2d78a5b899b87afc23457c55e9a68d9b78d104f0c56b90`
+- Server security profile：`LOCAL_ANONYMOUS_SANDBOX`
+- Certificate fingerprint：`null`
+
+这是 loopback 本地模拟设备，不是真实设备、真实 PLC 或生产安全环境。该精简 QA JSON 没有保存 task ID、ConfirmedPlan hash 和 ReplayResult hash，因此仅凭该 JSON 不能独立完成 receipt 到上述业务对象的全链 hash 绑定；完整 binding 由运行时 execution receipt 结构支持，但当前仓库固定 JSON 未收录全部字段。
+
+## Versions
+
+- Application：`0.1.0`
+- Dataset/schema/generator：`tw-dataset-v1` / `tw-schema-v1` / `tw-generator-v1`
+- Canonicalizer：`tw-canonicalizer-v1`
+- SPC rules：`tw-rules-v1`，snapshot `tw-spc-detection-v1`
+- Feature definition：`tw-feature-definition-v1`
+- Model/preprocessing：`tw-model-v1` / `tw-preprocessing-v1`
+- Evidence rules：`tw-evidence-rules-v1`
+- Approved case index：`tw-approved-case-index-v1`
+- Direction/planning/safety：`tw-direction-rules-v1` / `tw-parameter-planning-v1` / `tw-parameter-safety-v1`
+- Replay evaluation/simulator：`tw-evaluation-v1` / `tw-simulator-v1`
+- OPC-UA gateway/mapping/method：`tw-asyncua-sandbox-gateway-v1` / `tw-opcua-node-mapping-v1` / `tw-opcua-atomic-method-v2`
+
+## Public provenance hashes
+
+- Demo dataset manifest：`d66077f880e6d4c470772be30a771ca20d26520ab39c08fc4f4340fa4e31950c`
+- Demo raw CSV：`a7f13e1cf537f0a78c6adb482abd49a0b88e0a5fd96eeb33c0c3cef5957619b3`
+- Diagnostic manifest：`d2d287fcd830771c3b8c6e91f41152d950ea2a02820107c1ca802fb268b5ed4b`
+- Model artifact：`58d26ea14adc2e58b3b0e29ec6025040780dcc86c2c2422bcaa9d7ca6126dc9a`
+- Approved case manifest：`3259575b170a617a9314a7c6883d829b64df9a022be7a90529bf7e50db7acb81`
+- Planning manifest：`fc73d61a29bcfbe89ab3b8f34cd0cf7436ff10c0716c59be8882b21be2881f4b`
+- Replay simulator canonical manifest：`8d4b3582e9509bf0a1b1b1aa44a0d43fbbd5972f8ab0fe497dcd5712a4ee8824`
+
+## Test status at knowledge-pack audit
+
+- 本次在 audit HEAD `706f562502439ab2f998ae43cebf75a1f2c586e1` 上运行了与知识内容直接相关的 280 个 backend tests，结果全部通过。范围覆盖固定资产、诊断、案例检索、方向与候选、安全 Validator、ConfirmedPlan freshness、Replay、DeviceExecution、真实本地 OPC-UA sandbox 测试以及 Shadow Data/Analysis。
+- 仓库的 `docs/validation/engineering-validation.md` 另记录旧基线 commit `1fdc526cc8794965b6c591a2fa5bc399e50a4e2b` 的全量快照：433 backend tests passed、40 frontend tests passed、production build passed。该记录是历史验证证据，不冒充本次 audit HEAD 的全量重跑结果。
+- 本次文档任务未重跑前端测试或 production build，因为只修改 `docs/aily/`。
+
+## Fact boundaries
+
+- 当前固定 Demo 与模型开发资产是 synthetic，不是真实生产数据。
+- 当前未接入真实光学产线、真实设备、MES 或 QMS。
+- Shadow contract fixture 不是专家 ground truth。
+- Aily 只解释上述固定证据，不生成参数，不触发 Replay 或 OPC-UA。

@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1920" height="1080" viewBox="0 0 1920 1080" role="img">
+<defs>
+<linearGradient id="accent" x1="0" x2="1">
+<stop offset="0" stop-color="#355CFF"/>
+<stop offset=".52" stop-color="#6F5CE7"/>
+<stop offset="1" stop-color="#0C9A9A"/>
+</linearGradient>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+<feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#1C3355" flood-opacity=".09"/>
+</filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#33445E"/>
+</marker>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#355CFF"/>
+</marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#16885B"/>
+</marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#C94242"/>
+</marker>
+<marker id="arrow-orange" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#D97706"/>
+</marker>
+</defs>
+<rect x="0" y="0" width="1920" height="1080" rx="0" fill="#F4F7FB" stroke="none" stroke-width="1" opacity="1"/>
+<rect x="0" y="0" width="1920" height="12" rx="0" fill="url(#accent)" stroke="none" stroke-width="1" opacity="1"/>
+<text x="72" y="72" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="42" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">TuneWise 核心决策链</text>
+<text x="74" y="126" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">异常与根因证据结合调机过程信息，筛选当前适用案例，再形成可校验、可确认的调参候选</text>
+<rect x="1615" y="48" width="235" height="56" rx="28" fill="#10233F" stroke="none" stroke-width="1" opacity="1"/>
+<text x="1732" y="76" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">TuneWise · 图 03</text>
+<line x1="72" y1="166" x2="1848" y2="166" stroke="#D7DEEA" stroke-width="2" stroke-linecap="round" opacity="1"/>
+<rect x="70" y="205" width="1780" height="195" rx="18" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<rect x="70" y="205" width="190" height="195" rx="18" fill="#E3F6F5" stroke="none" stroke-width="1" opacity="1"/>
+<text x="165" y="243" fill="#0C9A9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">数据与检测</text>
+<text x="165" y="280" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">CORE</text>
+<rect x="70" y="420" width="1780" height="225" rx="18" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<rect x="70" y="420" width="190" height="225" rx="18" fill="#F0EDFF" stroke="none" stroke-width="1" opacity="1"/>
+<text x="165" y="458" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">模型、案例与过程</text>
+<text x="165" y="495" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">CORE</text>
+<rect x="70" y="655" width="1780" height="335" rx="18" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<rect x="70" y="655" width="190" height="335" rx="18" fill="#EAF0FF" stroke="none" stroke-width="1" opacity="1"/>
+<text x="165" y="693" fill="#355CFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">决策、验证与演示</text>
+<text x="165" y="730" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">CORE</text>
+<rect x="310" y="258" width="320" height="94" rx="15" fill="#FBFEFE" stroke="#B8DEDB" stroke-width="1.7" opacity="1"/>
+<text x="470.0" y="293.0" fill="#0C9A9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">版本化测量数据</text>
+<text x="470.0" y="327.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">Manifest + SHA-256</text>
+<line x1="626" y1="305" x2="676" y2="305" stroke="#0C9A9A" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="690" y="258" width="320" height="94" rx="15" fill="#FBFEFE" stroke="#B8DEDB" stroke-width="1.7" opacity="1"/>
+<text x="850.0" y="293.0" fill="#0C9A9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">数据完整性校验</text>
+<text x="850.0" y="327.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">schema / raw / canonical</text>
+<line x1="1006" y1="305" x2="1056" y2="305" stroke="#0C9A9A" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="1070" y="258" width="320" height="94" rx="15" fill="#FBFEFE" stroke="#B8DEDB" stroke-width="1.7" opacity="1"/>
+<text x="1230.0" y="293.0" fill="#0C9A9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">SPC 异常检测</text>
+<text x="1230.0" y="327.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">保护路由</text>
+<line x1="1386" y1="305" x2="1436" y2="305" stroke="#0C9A9A" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="1450" y="258" width="320" height="94" rx="15" fill="#FBFEFE" stroke="#B8DEDB" stroke-width="1.7" opacity="1"/>
+<text x="1610.0" y="293.0" fill="#0C9A9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">工程特征提取</text>
+<text x="1610.0" y="327.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">50 fixed features</text>
+<path d="M 1770 305 L 1810 305 L 1810 510 L 1770 510" stroke="#6F5CE7" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1450" y="473" width="320" height="104" rx="15" fill="#FCFBFF" stroke="#D2CBF4" stroke-width="1.7" opacity="1"/>
+<text x="1610.0" y="513.0" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">StandardScaler</text>
+<text x="1610.0" y="547.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">tw-preprocessing-v1</text>
+<line x1="1448" y1="525" x2="1404" y2="525" stroke="#6F5CE7" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="1070" y="473" width="320" height="104" rx="15" fill="#FCFBFF" stroke="#D2CBF4" stroke-width="1.7" opacity="1"/>
+<text x="1230.0" y="513.0" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">Logistic Regression</text>
+<text x="1230.0" y="547.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">固定可解释分类排序 · tw-model-v1</text>
+<line x1="1068" y1="525" x2="1024" y2="525" stroke="#6F5CE7" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="690" y="473" width="320" height="104" rx="15" fill="#FCFBFF" stroke="#D2CBF4" stroke-width="1.7" opacity="1"/>
+<text x="850.0" y="513.0" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">AI 根因优先级</text>
+<text x="850.0" y="547.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">稳定 Top-3 + logit 证据</text>
+<line x1="688" y1="525" x2="644" y2="525" stroke="#6F5CE7" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow)"/>
+<rect x="310" y="473" width="320" height="104" rx="15" fill="#FCFBFF" stroke="#D2CBF4" stroke-width="1.7" opacity="1"/>
+<text x="470.0" y="513.0" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">当前适用案例</text>
+<text x="470.0" y="547.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">历史参考案例检索 · structured KNN</text>
+<path d="M 310 577 L 285 577 L 285 730 L 310 730" stroke="#355CFF" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<rect x="310" y="675" width="230" height="110" rx="15" fill="#E7F5EE" stroke="#ADD7C1" stroke-width="1.7" opacity="1"/>
+<text x="425" y="693" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="700" text-anchor="middle">
+<tspan x="425" dy="0" dominant-baseline="hanging">安全调参</tspan>
+<tspan x="425" dy="27" dominant-baseline="hanging">候选生成</tspan>
+</text>
+<text x="425" y="760" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15.5" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">规则 + 案例证据</text>
+<line x1="540" y1="730" x2="559" y2="730" stroke="#355CFF" stroke-width="2.4" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="565" y="675" width="230" height="110" rx="15" fill="#E7F5EE" stroke="#ADD7C1" stroke-width="1.7" opacity="1"/>
+<text x="680" y="693" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="700" text-anchor="middle">
+<tspan x="680" dy="0" dominant-baseline="hanging">参数安全</tspan>
+<tspan x="680" dy="27" dominant-baseline="hanging">校验</tspan>
+</text>
+<text x="680" y="760" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15.5" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">ParameterSafetyValidator</text>
+<line x1="795" y1="730" x2="814" y2="730" stroke="#355CFF" stroke-width="2.4" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="820" y="675" width="230" height="110" rx="15" fill="#E7F5EE" stroke="#ADD7C1" stroke-width="1.7" opacity="1"/>
+<text x="935" y="693" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="700" text-anchor="middle">
+<tspan x="935" dy="0" dominant-baseline="hanging">工程师</tspan>
+<tspan x="935" dy="27" dominant-baseline="hanging">确认</tspan>
+</text>
+<text x="935" y="760" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15.5" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">AA_PROCESS_ENGINEER</text>
+<line x1="1050" y1="730" x2="1069" y2="730" stroke="#355CFF" stroke-width="2.4" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="1075" y="675" width="230" height="110" rx="15" fill="#FBFCFF" stroke="#C6D1F5" stroke-width="1.7" opacity="1"/>
+<text x="1190" y="693" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="700" text-anchor="middle">
+<tspan x="1190" dy="0" dominant-baseline="hanging">不可变</tspan>
+<tspan x="1190" dy="27" dominant-baseline="hanging">ConfirmedPlan</tspan>
+</text>
+<text x="1190" y="760" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15.5" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">VALID / STALE</text>
+<line x1="1305" y1="730" x2="1324" y2="730" stroke="#355CFF" stroke-width="2.4" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="1330" y="675" width="230" height="110" rx="15" fill="#FBFCFF" stroke="#C6D1F5" stroke-width="1.7" opacity="1"/>
+<text x="1445" y="693" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="700" text-anchor="middle">
+<tspan x="1445" dy="0" dominant-baseline="hanging">执行前</tspan>
+<tspan x="1445" dy="27" dominant-baseline="hanging">仿真验证</tspan>
+</text>
+<text x="1445" y="760" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15.5" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">Replay · 基线复现</text>
+<line x1="1560" y1="730" x2="1579" y2="730" stroke="#355CFF" stroke-width="2.4" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="1585" y="675" width="230" height="110" rx="15" fill="#FFF1DF" stroke="#E8BC80" stroke-width="1.7" opacity="1" stroke-dasharray="7 5"/>
+<text x="1700" y="693" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="700" text-anchor="middle">
+<tspan x="1700" dy="0" dominant-baseline="hanging">本地模拟设备</tspan>
+<tspan x="1700" dy="27" dominant-baseline="hanging">受控执行</tspan>
+</text>
+<text x="1700" y="760" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15.5" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">OPC-UA Sandbox</text>
+<rect x="310" y="585" width="570" height="48" rx="12" fill="#F0EDFF" stroke="#C9C0F3" stroke-width="1.5" opacity="1"/>
+<text x="595" y="609" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">调机过程信息：当前阶段 · 上一步调整 · 上一步结果</text>
+<path d="M 410 585 L 410 577" stroke="#6F5CE7" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="910" y="585" width="905" height="48" rx="12" fill="#FCEBEC" stroke="#EFC5C8" stroke-width="1.5" opacity="1"/>
+<text x="1362" y="609" fill="#C94242" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">不进入 classifier / StandardScaler / Root Cause Top-3 · 不直接计算参数值</text>
+<rect x="300" y="810" width="430" height="38" rx="19" fill="#FFFFFF" stroke="#BCCAF3" stroke-width="1.5" opacity="1"/>
+<text x="515.0" y="829" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">共同条件：测量相同 · 根因同为 PLANE_TILT</text>
+<rect x="750" y="810" width="520" height="38" rx="19" fill="#E7F5EE" stroke="#A7D4BC" stroke-width="1.5" opacity="1"/>
+<text x="1010.0" y="829" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">两边均有：保守 -1 tick · 标准 -2 ticks · 全部 PASSED</text>
+<rect x="1290" y="810" width="500" height="38" rx="19" fill="#F0EDFF" stroke="#C8BFF3" stroke-width="1.5" opacity="1"/>
+<text x="1540.0" y="829" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">结合调机步骤的决策演示 · SYNTHETIC</text>
+<rect x="300" y="858" width="720" height="110" rx="14" fill="#FFFFFF" stroke="#B9C8F2" stroke-width="1.5" opacity="1"/>
+<rect x="320" y="873" width="170" height="38" rx="19" fill="#EAF0FF" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="405.0" y="892" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">A｜初始评估</text>
+<text x="515" y="892" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">上一步调整：无</text>
+<text x="325" y="928" fill="#223D9A" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="18.5" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">当前适用案例  tw-aa-approved-011</text>
+<text x="325" y="954" fill="#6F5CE7" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="18" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">案例参考方案  pitch -3 ticks</text>
+<rect x="1045" y="858" width="770" height="110" rx="14" fill="#FFFFFF" stroke="#B9C8F2" stroke-width="1.5" opacity="1"/>
+<rect x="1065" y="873" width="205" height="38" rx="19" fill="#EAF0FF" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1167.5" y="892" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">B｜调整后评估</text>
+<text x="1290" y="892" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16.5" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">上一步：pitch 0.250000 → 0.200000 · 未观察到显著改善</text>
+<text x="1070" y="928" fill="#223D9A" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="18.5" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">当前适用案例  tw-aa-approved-003</text>
+<text x="1070" y="954" fill="#6F5CE7" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="18" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">案例参考方案  pitch -4 ticks</text>
+<text x="74" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">事实边界：A/B 为合成调机过程演示；不代表舜宇真实 SOP、真实生产数据或真实调参准确率</text>
+<text x="1848" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="end" dominant-baseline="middle" opacity="1">40 强最终参赛方案 · 2026-08-11</text>
+</svg>

@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img">
+<defs>
+<linearGradient id="accent" x1="0" x2="1">
+<stop offset="0" stop-color="#355CFF"/>
+<stop offset=".52" stop-color="#6F5CE7"/>
+<stop offset="1" stop-color="#0C9A9A"/>
+</linearGradient>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+<feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#1C3355" flood-opacity=".09"/>
+</filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#33445E"/>
+</marker>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#355CFF"/>
+</marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#16885B"/>
+</marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#C94242"/>
+</marker>
+<marker id="arrow-orange" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#D97706"/>
+</marker>
+</defs>
+<rect x="0" y="0" width="1920" height="1080" rx="0" fill="#F4F7FB" stroke="none" stroke-width="1" opacity="1"/>
+<rect x="0" y="0" width="1920" height="12" rx="0" fill="url(#accent)" stroke="none" stroke-width="1" opacity="1"/>
+<text x="72" y="72" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="42" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">执行前仿真验证与设备安全门禁</text>
+<text x="74" y="126" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">仿真验证通过不是自动写入许可：设备执行仍需 fail-closed 资格检查、受控 Method 与结果核对</text>
+<rect x="1615" y="48" width="235" height="56" rx="28" fill="#10233F" stroke="none" stroke-width="1" opacity="1"/>
+<text x="1732" y="76" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">TuneWise · 图 05</text>
+<line x1="72" y1="166" x2="1848" y2="166" stroke="#D7DEEA" stroke-width="2" stroke-linecap="round" opacity="1"/>
+<rect x="55" y="250" width="245" height="106" rx="15" fill="#E7F5EE" stroke="#A7D4BC" stroke-width="1.7" opacity="1" filter="url(#shadow)"/>
+<text x="177.5" y="291.0" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">已确认调参方案</text>
+<text x="177.5" y="325.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">ConfirmedPlan · VALID</text>
+<line x1="280" y1="303" x2="320" y2="303" stroke="#355CFF" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="330" y="250" width="245" height="106" rx="15" fill="#FFFFFF" stroke="#C4D0EA" stroke-width="1.7" opacity="1" filter="url(#shadow)"/>
+<text x="452.5" y="291.0" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">状态检查</text>
+<text x="452.5" y="325.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">freshness / hash</text>
+<line x1="555" y1="303" x2="595" y2="303" stroke="#355CFF" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="605" y="250" width="245" height="106" rx="15" fill="#E7F5EE" stroke="#A7D4BC" stroke-width="1.7" opacity="1" filter="url(#shadow)"/>
+<text x="727.5" y="291.0" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">安全复核</text>
+<text x="727.5" y="325.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">ParameterSafetyValidator</text>
+<line x1="830" y1="303" x2="870" y2="303" stroke="#355CFF" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="880" y="250" width="245" height="106" rx="15" fill="#FFFFFF" stroke="#C4D0EA" stroke-width="1.7" opacity="1" filter="url(#shadow)"/>
+<text x="1002.5" y="291.0" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">基线复现</text>
+<text x="1002.5" y="325.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">canonical hash match</text>
+<line x1="1105" y1="303" x2="1145" y2="303" stroke="#355CFF" stroke-width="2.5" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="1155" y="250" width="245" height="106" rx="15" fill="#FFFFFF" stroke="#C4D0EA" stroke-width="1.7" opacity="1" filter="url(#shadow)"/>
+<text x="1277.5" y="291.0" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">调参方案仿真</text>
+<text x="1277.5" y="325.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">Replay · paired simulation</text>
+<line x1="1400" y1="303" x2="1460" y2="303" stroke="#355CFF" stroke-width="2.6" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<polygon points="1570,240.0 1665.0,303 1570,366.0 1475.0,303" fill="#EAF0FF" stroke="#9FB2F0" stroke-width="2" filter="url(#shadow)"/>
+<text x="1570" y="278" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="700" text-anchor="middle">
+<tspan x="1570" dy="0" dominant-baseline="hanging">仿真验证结果</tspan>
+<tspan x="1570" dy="28" dominant-baseline="hanging">SUCCESS?</tspan>
+</text>
+<path d="M 1665 303 L 1710 303" stroke="#C94242" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-red)"/>
+<rect x="1687" y="226" width="70" height="38" rx="19" fill="#FCEBEC" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1722.0" y="245" fill="#C94242" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">未通过</text>
+<rect x="1720" y="265" width="145" height="76" rx="15" fill="#FCEBEC" stroke="#E9B3B8" stroke-width="1.7" opacity="1"/>
+<text x="1792.5" y="303.0" fill="#C94242" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">阻断</text>
+<path d="M 1570 366 L 1570 398 L 210 398 L 210 445" stroke="#16885B" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<rect x="1498" y="372" width="84" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1540.0" y="391" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">通过</text>
+<rect x="80" y="450" width="270" height="112" rx="15" fill="#E7F5EE" stroke="#9ED0B5" stroke-width="1.7" opacity="1" filter="url(#shadow)"/>
+<text x="215.0" y="494.0" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">设备执行资格检查</text>
+<text x="215.0" y="528.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">仅允许 1 个参数发生变化</text>
+<line x1="350" y1="506" x2="395" y2="506" stroke="#16885B" stroke-width="2.6" stroke-linecap="round" opacity="1" marker-end="url(#arrow-green)"/>
+<rect x="400" y="450" width="280" height="112" rx="15" fill="#E7F5EE" stroke="#9ED0B5" stroke-width="1.7" opacity="1" filter="url(#shadow)"/>
+<text x="540.0" y="494.0" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">设备身份与映射检查</text>
+<text x="540.0" y="528.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">mapping / type / unit / access</text>
+<line x1="680" y1="506" x2="720" y2="506" stroke="#16885B" stroke-width="2.6" stroke-linecap="round" opacity="1" marker-end="url(#arrow-green)"/>
+<rect x="730" y="420" width="1135" height="330" rx="18" fill="#FFFFFF" stroke="#AFC0E9" stroke-width="2" opacity="1" filter="url(#shadow)"/>
+<text x="770" y="460" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="27" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">本地模拟设备受控执行</text>
+<rect x="1540" y="441" width="280" height="38" rx="19" fill="#EAF0FF" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1680.0" y="460" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">仅受控 Method 写入</text>
+<rect x="770" y="548" width="155" height="106" rx="15" fill="#F8FAFE" stroke="#CFD7E8" stroke-width="1.7" opacity="1"/>
+<text x="847.5" y="589.0" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">执行锁</text>
+<text x="847.5" y="623.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">single lock</text>
+<line x1="917" y1="601" x2="939" y2="601" stroke="#355CFF" stroke-width="2.1" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="945" y="548" width="155" height="106" rx="15" fill="#F8FAFE" stroke="#CFD7E8" stroke-width="1.7" opacity="1"/>
+<text x="1022.5" y="589.0" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">幂等键</text>
+<text x="1022.5" y="623.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">same key</text>
+<line x1="1092" y1="601" x2="1114" y2="601" stroke="#355CFF" stroke-width="2.1" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="1120" y="548" width="155" height="106" rx="15" fill="#F8FAFE" stroke="#CFD7E8" stroke-width="1.7" opacity="1"/>
+<text x="1197.5" y="589.0" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">当前值核对</text>
+<text x="1197.5" y="623.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">before write</text>
+<line x1="1267" y1="601" x2="1289" y2="601" stroke="#355CFF" stroke-width="2.1" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="1295" y="548" width="155" height="106" rx="15" fill="#F8FAFE" stroke="#CFD7E8" stroke-width="1.7" opacity="1"/>
+<text x="1372.5" y="589.0" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">单参数写入</text>
+<text x="1372.5" y="623.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">controlled</text>
+<line x1="1442" y1="601" x2="1464" y2="601" stroke="#355CFF" stroke-width="2.1" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="1470" y="548" width="155" height="106" rx="15" fill="#E7F5EE" stroke="#ABD6BF" stroke-width="1.7" opacity="1"/>
+<text x="1547.5" y="589.0" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">写后回读</text>
+<text x="1547.5" y="623.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">= target</text>
+<line x1="1617" y1="601" x2="1639" y2="601" stroke="#355CFF" stroke-width="2.1" stroke-linecap="round" opacity="1" marker-end="url(#arrow-blue)"/>
+<rect x="1645" y="548" width="155" height="106" rx="15" fill="#E7F5EE" stroke="#ABD6BF" stroke-width="1.7" opacity="1"/>
+<text x="1722.5" y="589.0" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">执行凭证</text>
+<text x="1722.5" y="623.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">immutable</text>
+<rect x="770" y="680" width="1050" height="42" rx="12" fill="#EDF1F6" stroke="#D2DAE6" stroke-width="1" opacity="1"/>
+<text x="1295" y="701" fill="#33445E" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">普通 OPC-UA Variable 对客户端保持只读；缺少受控 Method 时禁止回退写入</text>
+<rect x="80" y="790" width="820" height="170" rx="18" fill="#FFF1DF" stroke="#E7BC82" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="115" y="825" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">异常路径 · 通信超时</text>
+<rect x="115" y="852" width="205" height="68" rx="15" fill="#FFFFFF" stroke="#E8C898" stroke-width="1.7" opacity="1"/>
+<text x="217.5" y="886.0" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">客户端超时</text>
+<line x1="315" y1="886" x2="360" y2="886" stroke="#D97706" stroke-width="2.3" stroke-linecap="round" opacity="1" marker-end="url(#arrow-orange)"/>
+<rect x="370" y="852" width="205" height="68" rx="15" fill="#FFFFFF" stroke="#E8C898" stroke-width="1.7" opacity="1"/>
+<text x="472.5" y="886.0" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">UNKNOWN_OUTCOME</text>
+<line x1="595" y1="886" x2="640" y2="886" stroke="#D97706" stroke-width="2.3" stroke-linecap="round" opacity="1" marker-end="url(#arrow-orange)"/>
+<rect x="650" y="852" width="205" height="68" rx="15" fill="#FFFFFF" stroke="#E8C898" stroke-width="1.7" opacity="1"/>
+<text x="752.5" y="886.0" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17.5" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">只读结果核对</text>
+<text x="115" y="940" fill="#C94242" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">UNKNOWN_OUTCOME ≠ FAILED ≠ 自动重试 · 只读查询同一 idempotency key</text>
+<rect x="940" y="790" width="925" height="170" rx="18" fill="#FFFFFF" stroke="#E4C18E" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<rect x="990" y="817" width="285" height="38" rx="19" fill="#EDF1F6" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1132.5" y="836" fill="#33445E" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">设备执行环境</text>
+<text x="990" y="882" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="34" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">仅本地模拟环境</text>
+<text x="1415" y="882" fill="#C94242" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="28" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">非真实生产线</text>
+<text x="990" y="928" fill="#5D6B82" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">loopback 127.0.0.1 · LOCAL_ANONYMOUS_SANDBOX</text>
+<text x="74" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">仿真验证通过只解锁下一轮设备执行资格检查；它本身不触发设备写入，也不证明真实设备有效</text>
+<text x="1848" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="end" dominant-baseline="middle" opacity="1">40 强最终参赛方案 · 2026-08-11</text>
+</svg>

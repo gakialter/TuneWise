@@ -33,6 +33,12 @@
 
 每次任务结束后，系统将“异常现象—数据证据—根因—调整动作—处理结果—适用条件”整理为待审核案例，审核通过后进入知识库，并用于后续诊断和案例匹配，实现“调一次、学一次”。原型阶段重点验证 Top-3 根因命中率、案例检索命中率、参数建议合法率、越界拦截率和首轮排障时间，并观察调整后质量指标的模拟变化。系统通过减少异常定位时间、无效试调和重复错误，为现场良率改善提供决策支持，但不直接控制设备或替代工程人员。
 
+### 当前比赛版本补充：双层 AI
+
+当前实现由两层 AI 组成：底层 `TuneWise Deterministic AI Core` 负责 Detect、Diagnose、Recommend、Validate、Replay 与受控 Execute；上层已发布的 `Feishu Aily Generative AI Collaboration Layer` 通过 Workflow Application、Knowledge Space Retrieval / RAG 与 LLM 负责 Retrieve、Explain、Trace 与 Answer。TuneWise 负责产生可验证的工业决策证据，飞书 Aily 负责把这些证据和工程知识组织为自然语言解释。
+
+Aily V1 只连接 `Versioned Project Knowledge + Fixed Demo Evidence`，没有 Evidence Bridge、MCP、HTTP Request、Custom Connector 或 Runtime API。它不实时读取 TuneWise 运行状态，不生成生产参数，不修改 `ConfirmedPlan`，不触发 Replay，也不执行 OPC-UA write。
+
 ---
 
 ## 4. 不可突破的事实与实现边界

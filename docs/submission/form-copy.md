@@ -1,6 +1,6 @@
 # TuneWise｜比赛报名表可复制材料
 
-本文件按常见报名字段整理。提交前请根据报名页面的实际字数规则复核；所有结果均对应 `tw-08-complete` 或本次比赛提交版本。
+本文件按常见报名字段整理。提交前请根据报名页面的实际字数规则复核；所有结果均对应已注明的 Core 验证基线或已发布并人工验收的飞书 Aily V1。
 
 ## 1. 项目名称
 
@@ -16,11 +16,11 @@ TuneWise 面向精密光学主动对准单一工站，串联离线数据导入�
 
 ## 4. 300 字项目简介
 
-TuneWise 是面向精密光学主动对准（AA）单一工站的离线调机决策支持原型，针对数据、参数、质量结果和经验割裂，以及异常排查依赖个人经验的问题。系统导入版本化 CSV 后，以 SPC 规则识别四角 MTF 不对称异常，再用固定逻辑回归模型输出 Top-3 根因、规则和 logit 贡献；随后仅从兼容的 APPROVED 案例中检索经验，依据方向证据生成少量候选，并用统一 Validator 校验范围、步长、方向和参数族。工程师确认后，系统先重现导入基线，再在同一场景、seed 与扰动下执行配对模拟回放，形成不可修改的结果和哈希。项目运行期无需 LLM、云服务或真实设备，不向设备写参；模拟结果不代表真实产线效果或真实因果关系。
+TuneWise 是面向精密光学主动对准（AA）单一工站的调机决策支持原型。底层确定性 Core 用 SPC、固定逻辑回归、APPROVED-only 检索和统一 Validator 产生可追溯的根因、安全候选、人工确认与 Replay 证据；本地 Core 运行期不依赖 LLM 或外部网络。上层已发布的飞书 Aily 通过 Knowledge Space、RAG 与 LLM 解释版本化知识和固定 Demo Evidence。Aily 不生成参数、不修改 ConfirmedPlan、不触发 Replay，也没有 OPC-UA 写权限。项目未接入真实设备或真实产线；模拟结果不代表真实产线效果或真实因果关系。
 
 ## 5. 500 字项目简介
 
-TuneWise 聚焦精密光学主动对准（AA）单一工站，目标不是让 AI 自动控制设备，而是给工程人员提供可解释、可拒绝、可追溯的调机决策支持。项目把版本化 CSV 导入、异常检测、Top-3 根因、已审核案例检索、安全候选、人工确认和确定性配对模拟回放组织成闭环。导入同时校验原始文件和规范化观测哈希；SPC 规则区分目标异常、正常、整体退化和数据不足；固定 StandardScaler 与 multinomial logistic regression 输出 Top-3，并把特征影响表述为 logit 贡献。结构化 KNN 只检索兼容的 APPROVED 案例。荐参前，每个参数都要有明确方向证据；候选以 Decimal/tick 计算，再统一校验范围、步长、最大变化、标称方向和参数族。证据不足、方向冲突、方案过期或内容被篡改时，系统拒绝继续。人工确认形成不可变 ConfirmedPlan；回放先做 baseline reproduction，再以相同场景、扰动和 seed 比较前后结果。固定演示中，最差角落 MTF 从 0.567683 变为 0.651478，四角极差从 0.184837 变为 0.102292，状态为 SUCCESS。以上仅是规则约束模拟结果，不代表真实产线良率改善。项目不使用企业内部数据，未连接 MES、QMS 或真实设备，运行时无 LLM 和网络 API 依赖。
+TuneWise 聚焦精密光学主动对准（AA）单一工站，目标不是让 AI 自动控制设备，而是给工程人员提供可解释、可拒绝、可追溯的调机决策支持。底层确定性 Core 把版本化 CSV、SPC 异常路由、固定逻辑回归 Top-3、APPROVED-only KNN、安全候选、人工确认和配对模拟回放组织成闭环；所有候选统一经过 Decimal/tick Validator，证据不足、方向冲突、方案过期或内容篡改时拒绝继续。上层已发布的飞书 Aily Workflow Application 使用 7 文件 Knowledge Pack、Knowledge Space Retrieval / RAG 与 LLM，把项目知识、规则、安全约束和固定 Demo Evidence 组织为自然语言解释。Aily 不进入安全关键链，不生成参数、不修改 ConfirmedPlan、不触发 Replay 或 OPC-UA。固定 Replay 的 SUCCESS 仅表示模拟评价规则通过，不代表真实产线良率改善。项目不使用企业内部数据，未连接 MES、QMS 或真实设备；本地 Core 运行期不依赖 LLM 或外部网络，Aily 也没有 Bridge 或 Runtime API。
 
 ## 6. 800～1000 字完整项目介绍
 
@@ -34,7 +34,7 @@ TuneWise 因此定位为面向主动对准（AA）单一工站的离线调机决
 
 只有 Replay 模块能够调用 SimulatorGateway。系统先规范化重现导入基线，哈希一致后才执行配对模拟；前后使用相同隐藏场景、样本数、扰动、seed 和因果版本，唯一变化是确认参数。固定演示中，baseline reproduction 为 PASSED，回放为 SUCCESS，最差角落 MTF 从 0.567683 变为 0.651478，四角极差从 0.184837 变为 0.102292，控制限由 false 变为 true，目标异常由 true 变为 false。
 
-项目使用公开知识和规则约束模拟数据，不包含企业内部数据；未接入 MES、QMS 或真实设备，未向设备写入参数。运行时无 LLM 或网络 API 依赖。以上说明模拟环境内的可复现变化，不代表真实产线良率改善，不证明真实因果关系，也不表示获得最优参数。TW-09～TW-13 尚待完成。
+项目使用公开知识和规则约束模拟数据，不包含企业内部数据；未接入 MES、QMS 或真实设备。TuneWise Core 运行时不依赖 LLM 或外部网络；独立发布的飞书 Aily 仅通过 RAG 解释版本化知识与固定 Demo Evidence，没有 Bridge、Runtime API 或控制权限。以上说明模拟环境内的可复现变化，不代表真实产线良率改善，不证明真实因果关系，也不表示获得最优参数。TW-09～TW-13 尚待完成。
 
 ## 7. 项目背景与痛点
 
@@ -50,10 +50,11 @@ TuneWise 因此定位为面向主动对准（AA）单一工站的离线调机决
 
 ## 9. 核心创新点
 
-1. **人在回路而非模型直控设备**：模型只帮助排序和解释；参数候选必须通过服务端安全校验并由工程师确认，系统没有真实设备写参接口。
+1. **人在回路而非模型直控设备**：模型只帮助排序和解释；参数候选必须通过服务端安全校验并由工程师确认。当前仅有显式启用的本地 OPC-UA sandbox 受控执行，不是实际设备写参接口。
 2. **结构化模型、规则、案例与安全校验组合**：SPC、逻辑回归、APPROVED-only KNN、方向规则和统一 Validator 各自承担清晰职责，任一模块都不能绕过安全边界。
 3. **参数候选全链路可追溯**：从观测、诊断、方向证据、案例、约束快照到候选、确认和结果均绑定版本及哈希，STALE 或篡改内容被阻断。
 4. **基线重现加配对模拟回放**：先证明模拟器能规范化重现导入基线，再固定场景、扰动和 seed 做前后对照，避免把预制结果当成验证；同时明确不外推到真实产线。
+5. **双层 AI 职责隔离**：TuneWise 产生可验证的工业决策证据；飞书 Aily 通过 RAG 做 Retrieve、Explain、Trace 与 Answer，不参与参数与设备控制。
 
 ## 10. 技术方案
 
@@ -63,6 +64,7 @@ TuneWise 因此定位为面向主动对准（AA）单一工站的离线调机决
 - 决策：版本化 SPC、固定 StandardScaler 与 multinomial logistic regression、结构化 KNN；
 - 安全：Decimal/tick、ParameterDirectionEvidence、ParameterSafetyValidator、ConfirmedPlan、STALE 与 SHA-256；
 - 回放：Replay-only SimulatorGateway、ObservableCanonicalizer、ReplayResultCanonicalizer 与冻结评价规则；
+- 生成式 AI 协作：飞书 Aily Workflow Application、Knowledge Space、Knowledge Space Retrieval / RAG、LLM；V1 仅使用版本化知识与固定证据；
 - 验证：pytest、Vitest、Testing Library、production build、浏览器主路径与离线检查。
 
 ## 11. 数据来源说明
@@ -76,12 +78,13 @@ TuneWise 因此定位为面向主动对准（AA）单一工站的离线调机决
 - 实现 APPROVED-only 案例检索、方向证据、安全候选和人工确认；
 - 实现 baseline reproduction、确定性配对模拟回放、结果状态与 SHA-256；
 - 提供本地启动、真实应用截图、评委指南、五分钟脚本和应急卡。
+- 发布 Feishu Aily RAG Engineering Copilot，并完成 7/7 知识上传、安全 Hard Gates 与 Hero Demo 人工验收。
 
 ## 13. 量化验证
 
-- `tw-08-complete`：后端 297 项测试、前端 33 项测试、production build 与 compileall 通过；
+- Core 历史全量快照绑定 commit `1fdc526cc8794965b6c591a2fa5bc399e50a4e2b`：433 个后端测试、40 个前端测试与 production build 通过；详见 `docs/validation/engineering-validation.md`，不冒充当前 HEAD 全量结果；
 - 固定输入 10 次确定性验证一致；390px 响应式检查通过；
-- 运行期外部请求、LLM 调用和真实设备调用均为 0；
+- 该 Core 验证中的外部 HTTP 请求和真实设备调用均为 0；独立 Aily V1 的人工验收见 `docs/validation/aily-v1-validation.md`；
 - 固定回放：center MTF 0.831003 → 0.832128，worst corner 0.567683 → 0.651478，corner range 0.184837 → 0.102292，corner std 0.071709 → 0.042654，控制限 false → true，目标异常 true → false；
 - baseline reproduction `PASSED`，replay `SUCCESS`，`attempt_count = 1`。
 
@@ -99,6 +102,7 @@ TuneWise 因此定位为面向主动对准（AA）单一工站的离线调机决
 - 当前完成至 TW-08；TW-09～TW-13 尚未实现；
 - 任务关闭、复盘报告和待审核案例提交属于 TW-10，当前界面止于 `REPLAYED`；
 - 当前源码交付不是 TW-13 的完整 Windows 离线发行包。
+- Aily V1 仅解释版本化知识与固定 Demo Evidence，没有实时 Bridge、Runtime API 或设备控制权限。
 
 ## 16. 后续规划
 
@@ -106,13 +110,12 @@ TuneWise 因此定位为面向主动对准（AA）单一工站的离线调机决
 
 ## 17. 技术关键词
 
-精密光学；主动对准；AA 工站；SPC；逻辑回归；Top-3 根因；Logit 贡献；结构化 KNN；人在回路；ParameterSafetyValidator；ConfirmedPlan；确定性配对模拟回放；FastAPI；React；SQLite；离线应用；可追溯决策支持
+精密光学；主动对准；AA 工站；SPC；逻辑回归；Top-3 根因；Logit 贡献；结构化 KNN；人在回路；ParameterSafetyValidator；ConfirmedPlan；确定性配对模拟回放；飞书 Aily；Knowledge Space；RAG；生成式 AI 工程协作；FastAPI；React；SQLite；可追溯决策支持
 
 ## 18. GitHub 仓库说明
 
-- 仓库链接：`https://github.com/gakialter/TuneWise`（提交时替换或确认）
-- 当前状态：**PRIVATE，尚不能宣称评委可访问。**
-- 公开前请确认：敏感信息与本机路径扫描通过、截图无个人信息、License 选择已决定、比赛规则允许公开、默认分支与比赛标签均已推送。
-- 公开后请使用无痕窗口验证 README、图片、Mermaid、相对链接、clone 权限与 `competition-submission-v1` 标签。
+- 仓库链接：`https://github.com/gakialter/TuneWise`
+- 当前状态：**PUBLIC**；2026-08-09 已通过禁用本机凭据的匿名 `git ls-remote` 验证可读，远端 HEAD 为 `706f562502439ab2f998ae43cebf75a1f2c586e1`。
+- 正式提交前仍需确认：敏感信息与本机路径扫描通过、截图无个人信息、License 与比赛公开规则已复核，并将本轮文档变更推送到默认分支。
 
 > 规则约束模拟环境中的离线回放结果，不代表真实产线良率改善。
