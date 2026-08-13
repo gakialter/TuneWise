@@ -196,6 +196,6 @@ TuneWise 未连接 MES、QMS 或真实设备，未向真实设备写入参数，
 
 ## 12. Aily V1 评审问答
 
-已发布应用可用于询问项目定位、算法规则、安全边界和固定 Demo Evidence。既有人工验收覆盖 `PLANE_TILT` 排名解释、pitch `0.250000 → 0.200000` 的人工选择链，以及 Replay `SUCCESS` 的证明边界；该验收记录是 Process-aware addendum 加入前的 7 文件快照，不应冒充新增知识已重新上传或重新验收。
+已发布应用可用于询问项目定位、算法规则、安全边界、固定 Demo Evidence 与 Process-aware evidence。当前 Live Knowledge Pack 为 8/8；人工 UI / conversational acceptance validation 已覆盖既有 Safety Hard Gates、`PLANE_TILT` 排名解释、pitch `0.250000 → 0.200000` 的人工选择链、Replay `SUCCESS` 的证明边界，以及 Process-aware A/B 问答。该验收不是 automated benchmark、模型准确率或生产环境验证。
 
 评审时必须保持以下事实：`0.997781` 是相对排序 score，不是校准故障概率；没有真实光学产线或已验证真实设备数据；Aily 只做 Retrieve / Explain / Trace / Answer，不做参数生成或设备控制。
