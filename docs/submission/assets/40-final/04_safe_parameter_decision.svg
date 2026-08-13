@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1920" height="1080" viewBox="0 0 1920 1080" role="img">
+<defs>
+<linearGradient id="accent" x1="0" x2="1">
+<stop offset="0" stop-color="#355CFF"/>
+<stop offset=".52" stop-color="#6F5CE7"/>
+<stop offset="1" stop-color="#0C9A9A"/>
+</linearGradient>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+<feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#1C3355" flood-opacity=".09"/>
+</filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#33445E"/>
+</marker>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#355CFF"/>
+</marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#16885B"/>
+</marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#C94242"/>
+</marker>
+<marker id="arrow-orange" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#D97706"/>
+</marker>
+</defs>
+<rect x="0" y="0" width="1920" height="1080" rx="0" fill="#F4F7FB" stroke="none" stroke-width="1" opacity="1"/>
+<rect x="0" y="0" width="1920" height="12" rx="0" fill="url(#accent)" stroke="none" stroke-width="1" opacity="1"/>
+<text x="72" y="72" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="42" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">安全调参决策流程</text>
+<text x="74" y="126" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">模型不直接输出参数：根因、空间特征、当前偏差、方向规则与案例幅值共同约束候选</text>
+<rect x="1615" y="48" width="235" height="56" rx="28" fill="#10233F" stroke="none" stroke-width="1" opacity="1"/>
+<text x="1732" y="76" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">TuneWise · 图 04</text>
+<line x1="72" y1="166" x2="1848" y2="166" stroke="#D7DEEA" stroke-width="2" stroke-linecap="round" opacity="1"/>
+<rect x="70" y="212" width="305" height="112" rx="18" fill="#FFFFFF" stroke="#C9D4EF" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="90" y="242" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">根因证据</text>
+<text x="90" y="281" fill="#5D6B82" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">PLANE_TILT · score 0.997781</text>
+<path d="M 222 324 L 960 395" stroke="#9EADCA" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="5 5"/>
+<rect x="425" y="212" width="305" height="112" rx="18" fill="#FFFFFF" stroke="#C9D4EF" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="445" y="242" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">当前空间特征</text>
+<text x="445" y="281" fill="#5D6B82" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">top_bottom = 0.132913</text>
+<path d="M 577 324 L 960 395" stroke="#9EADCA" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="5 5"/>
+<rect x="780" y="212" width="305" height="112" rx="18" fill="#FFFFFF" stroke="#C9D4EF" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="800" y="242" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">当前参数偏差</text>
+<text x="800" y="281" fill="#5D6B82" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">pitch 0.250000 · nominal 0.000000</text>
+<path d="M 932 324 L 960 395" stroke="#9EADCA" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="5 5"/>
+<rect x="1135" y="212" width="305" height="112" rx="18" fill="#FFFFFF" stroke="#C9D4EF" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="1155" y="242" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">方向规则</text>
+<text x="1155" y="281" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">PLANE_TILT_PITCH_SAME_SIGN</text>
+<path d="M 1287 324 L 960 395" stroke="#9EADCA" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="5 5"/>
+<rect x="1490" y="212" width="305" height="112" rx="18" fill="#FFFFFF" stroke="#C9D4EF" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="1510" y="242" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">已审核案例幅值</text>
+<text x="1510" y="281" fill="#5D6B82" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">median evidence · -3 ticks</text>
+<path d="M 1642 324 L 960 395" stroke="#9EADCA" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="5 5"/>
+<rect x="680" y="392" width="560" height="82" rx="15" fill="#EAF0FF" stroke="#AFC0F4" stroke-width="1.7" opacity="1" filter="url(#shadow)"/>
+<text x="960.0" y="421.0" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">安全调参候选生成</text>
+<text x="960.0" y="455.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">确定性方向规则 + 幅值规则</text>
+<line x1="960" y1="474" x2="960" y2="514" stroke="#16885B" stroke-width="3" stroke-linecap="round" opacity="1" marker-end="url(#arrow-green)"/>
+<rect x="680" y="520" width="560" height="88" rx="15" fill="#E7F5EE" stroke="#9FD0B7" stroke-width="1.7" opacity="1" filter="url(#shadow)"/>
+<text x="960.0" y="552.0" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">参数安全校验</text>
+<text x="960.0" y="586.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">ParameterSafetyValidator · 范围 / 网格 / 方向 / 最大变化 / hash</text>
+<rect x="1280" y="545" width="470" height="38" rx="19" fill="#FFF1DF" stroke="#E8BC7C" stroke-width="1.5" opacity="1"/>
+<text x="1515.0" y="564" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">roll：证据不足（INSUFFICIENT_SUPPORT）→ 不生成候选</text>
+<path d="M 960 608 L 960 636 L 330 636 L 330 664" stroke="#16885B" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<rect x="70" y="670" width="520" height="154" rx="18" fill="#E7F5EE" stroke="#8CC9AA" stroke-width="2" opacity="1" filter="url(#shadow)"/>
+<text x="94" y="699" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">保守调整方案 · 已选择</text>
+<text x="94" y="741" fill="#10233F" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="22" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">pitch 0.250000 → 0.200000</text>
+<text x="94" y="778" fill="#16885B" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="18" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">-1 tick · PASSED</text>
+<text x="94" y="807" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">CONSERVATIVE · 固定规则幅值</text>
+<path d="M 960 608 L 960 636 L 925 636 L 925 664" stroke="#16885B" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<rect x="665" y="670" width="520" height="154" rx="18" fill="#FFFFFF" stroke="#C8D2E6" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="689" y="699" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">标准调整方案</text>
+<text x="689" y="741" fill="#10233F" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="22" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">pitch 0.250000 → 0.150000</text>
+<text x="689" y="778" fill="#223D9A" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="18" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">-2 ticks · PASSED</text>
+<text x="689" y="807" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">STANDARD · 固定规则幅值 · 未选择</text>
+<path d="M 960 608 L 960 636 L 1520 636 L 1520 664" stroke="#16885B" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<rect x="1260" y="670" width="520" height="154" rx="18" fill="#FFFFFF" stroke="#C8D2E6" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="1284" y="699" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">案例参考方案</text>
+<text x="1284" y="741" fill="#10233F" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="22" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">pitch 0.250000 → 0.100000</text>
+<text x="1284" y="778" fill="#6F5CE7" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="18" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">-3 ticks · PASSED</text>
+<text x="1284" y="807" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">CASE_GUIDED · approved-001 / 002 / 011</text>
+<path d="M 330 824 L 330 860 L 620 860" stroke="#16885B" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<rect x="620" y="836" width="400" height="92" rx="15" fill="#E7F5EE" stroke="#91CBAA" stroke-width="1.7" opacity="1"/>
+<text x="820.0" y="870.0" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">工程师确认</text>
+<text x="820.0" y="904.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">AA_PROCESS_ENGINEER · Human-in-the-loop</text>
+<line x1="1020" y1="882" x2="1080" y2="882" stroke="#16885B" stroke-width="3" stroke-linecap="round" opacity="1" marker-end="url(#arrow-green)"/>
+<rect x="1080" y="836" width="540" height="92" rx="15" fill="#EAF0FF" stroke="#AFC0F4" stroke-width="1.7" opacity="1"/>
+<text x="1350.0" y="870.0" fill="#223D9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">不可变 ConfirmedPlan</text>
+<text x="1350.0" y="904.0" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="middle" dominant-baseline="middle" opacity="1">tw-confirmed-plan-936e9f41d9e41a72 · VALID</text>
+<rect x="70" y="956" width="1780" height="54" rx="14" fill="#EDF1F6" stroke="#D3DAE5" stroke-width="1" opacity="1"/>
+<text x="960" y="983" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">结论：模型只排序根因；参数由确定性规则 / 案例证据生成，并经参数安全校验与工程师确认</text>
+<text x="74" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">固定 Demo：三个候选均存在且通过校验；仅保守调整方案（CONSERVATIVE）-1 tick 被工程师确认</text>
+<text x="1848" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="end" dominant-baseline="middle" opacity="1">40 强最终参赛方案 · 2026-08-11</text>
+</svg>

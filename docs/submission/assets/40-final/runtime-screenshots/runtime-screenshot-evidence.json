@@ -1,0 +1,194 @@
+{
+  "evidence_version": "tw-40-final-runtime-screenshot-evidence-v1",
+  "generated_at": "2026-08-11T15:22:40.989Z",
+  "capture_script": "docs/submission/capture_40_final_runtime_screenshots.mjs",
+  "viewport": {
+    "width": 1440,
+    "height": 1100
+  },
+  "runtime": {
+    "web_origin": "http://127.0.0.1:8123",
+    "loopback_only": true,
+    "independent_temporary_database": true,
+    "temporary_database_removed_after_capture": true,
+    "opcua_surface": "LOCAL_OPCUA_SANDBOX"
+  },
+  "fixed_demo": {
+    "task_id": "tw-demo-task-001",
+    "top_root_cause": "PLANE_TILT",
+    "relative_ranking_score": "0.997781",
+    "selected_candidate": {
+      "parameter_name": "pitch",
+      "current_value": "0.250000",
+      "target_value": "0.200000",
+      "generation_type": "CONSERVATIVE",
+      "delta_ticks": -1,
+      "validation_status": "PASSED"
+    },
+    "confirmed_plan_status": "VALID",
+    "simulation_validation_status": "SUCCESS",
+    "execution_surface": "LOCAL_OPCUA_SANDBOX",
+    "execution_status": "SUCCEEDED",
+    "actual_after_readback": "0.200000",
+    "receipt_hash": "ded71aacc5dccd3e7505c32b8fee8b36656d3560fc822d3f4784814455b5e55a",
+    "viewport_fit": {
+      "innerWidth": 1440,
+      "innerHeight": 1100,
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "canScrollX": false,
+      "offenders": []
+    }
+  },
+  "process_aware_demo": {
+    "demo_version": "tw-process-aware-demo-v1",
+    "source_kind": "SYNTHETIC_TEST_FIXTURE",
+    "shared_evidence": {
+      "measurement_evidence": "SAME",
+      "top_root_cause": "PLANE_TILT",
+      "root_cause_evidence": "SAME"
+    },
+    "scenario_a": {
+      "process_stage": "INITIAL_ASSESSMENT",
+      "previous_action": null,
+      "eligible_case": "tw-aa-approved-011",
+      "case_guided_pitch_ticks": -3
+    },
+    "scenario_b": {
+      "process_stage": "POST_ADJUSTMENT_EVALUATION",
+      "previous_action": "pitch 0.250000 -> 0.200000",
+      "previous_action_outcome": "NO_MATERIAL_IMPROVEMENT",
+      "eligible_case": "tw-aa-approved-003",
+      "case_guided_pitch_ticks": -4
+    },
+    "unchanged_controls": {
+      "conservative_pitch_ticks": -1,
+      "standard_pitch_ticks": -2,
+      "parameter_safety_validator": "PASSED"
+    },
+    "viewport_fit": {
+      "innerWidth": 1440,
+      "innerHeight": 1100,
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "canScrollX": false,
+      "offenders": []
+    }
+  },
+  "aily_live_screenshot": {
+    "file": "docs/submission/assets/40-final/aily-screenshots/03_hero_qa.png",
+    "bytes": 209458,
+    "sha256": "0e858a214839183f013461d7ae28ffc0fb3d12dfc516680d9fbadb704acdc1f9",
+    "width": 1457,
+    "height": 1356,
+    "evidence_kind": "manual UI / conversational acceptance evidence",
+    "question_scope": "fixed Demo PLANE_TILT Top-1 explanation",
+    "process_aware_q5": false,
+    "device_control_evidence": false
+  },
+  "screenshots": [
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/fixed-01-root-cause-top1.png",
+      "bytes": 52854,
+      "sha256": "698d99ff790f873fa27d192d645a97c3fb4b749bb5f315472a61ac2066a24af0",
+      "width": 1310,
+      "height": 454
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/fixed-02-selected-conservative-candidate.png",
+      "bytes": 23809,
+      "sha256": "3553f04f51d7723db6391845c0ca72524bf7aac53478a0fae08e41d9b7d59d35",
+      "width": 1310,
+      "height": 322
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/fixed-03-confirmed-plan.png",
+      "bytes": 26851,
+      "sha256": "ad08451ed9e5c50b1a7d8118114e44020d95a4978c4fe383bfbebf15de4197e2",
+      "width": 1358,
+      "height": 246
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/fixed-04-replay-result.png",
+      "bytes": 13833,
+      "sha256": "a2b017e8e3d2c56dd3f0ba7489156963a604433ab4fb30362fb3c0a1dafe7dd2",
+      "width": 1358,
+      "height": 154
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/fixed-05-device-receipt.png",
+      "bytes": 26496,
+      "sha256": "8450c244130d38915383e1194b7a7c459e1d5af966649050c2b631fbbe4f5770",
+      "width": 1358,
+      "height": 370
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/fixed-final-viewport-1440x1100.png",
+      "bytes": 110181,
+      "sha256": "d95a42d1e8771296d8d2110dfa8524ee22f6eefbbfdd1bb13d76099ed44a3cc8",
+      "width": 1440,
+      "height": 1100
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/process-01-shared-evidence.png",
+      "bytes": 36695,
+      "sha256": "128de630bcf09ee1530c6b6a3bc7e0bb6ae2214ecc3fd2d4dbd67b160e2840da",
+      "width": 1338,
+      "height": 290
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/process-02-scenario-a-path.png",
+      "bytes": 59521,
+      "sha256": "9cf234a6c9119f9a52f85f6a891e51f30157fe0c745b84d1a5846cd422aa7cc1",
+      "width": 659,
+      "height": 518
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/process-03-scenario-a-candidate.png",
+      "bytes": 7031,
+      "sha256": "6bf933a0d3041aa86d674657a217082ceb8d73e8771a14a61b4092f9b1cd9383",
+      "width": 623,
+      "height": 150
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/process-04-scenario-b-path.png",
+      "bytes": 64406,
+      "sha256": "239623eadba0da58b8a34c9a4934b2a20e12b54c4518bbba882e6e2f7a548206",
+      "width": 659,
+      "height": 529
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/process-05-scenario-b-candidate.png",
+      "bytes": 7054,
+      "sha256": "b1b341093058ed3350b81a694f5d74170f2be3a9cb04610cbfbc68fd0bc50020",
+      "width": 623,
+      "height": 150
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/process-06-invariant-band.png",
+      "bytes": 51904,
+      "sha256": "cb89c7eb34dfcff821c81f33560cd51cc0cb090d9471a830b9e81646658b1a8d",
+      "width": 1338,
+      "height": 277
+    },
+    {
+      "file": "docs/submission/assets/40-final/runtime-screenshots/process-final-viewport-1440x1100.png",
+      "bytes": 140593,
+      "sha256": "f8c7b3567021a15d72f5477c5dc0cca328ca9d58a074c5fc473d1f27022f3f47",
+      "width": 1440,
+      "height": 1100
+    }
+  ],
+  "observations": {
+    "observed_http_request_count": 17,
+    "console_error_count": 0,
+    "page_error_count": 0,
+    "failed_request_count": 0,
+    "external_request_count": 0
+  },
+  "facts_boundary": {
+    "fixed_demo": "Real running software UI; synthetic fixed dataset; LOCAL OPC-UA SANDBOX; not production validation.",
+    "process_aware_demo": "Real running software UI; synthetic process-context fixtures; not Sunny Optical SOP or production tuning accuracy.",
+    "aily": "Real published Aily screenshot for a fixed-Demo question; not Process-aware Q5 and not device-control evidence."
+  }
+}

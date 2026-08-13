@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1920" height="1080" viewBox="0 0 1920 1080" role="img">
+<defs>
+<linearGradient id="accent" x1="0" x2="1">
+<stop offset="0" stop-color="#355CFF"/>
+<stop offset=".52" stop-color="#6F5CE7"/>
+<stop offset="1" stop-color="#0C9A9A"/>
+</linearGradient>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+<feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#1C3355" flood-opacity=".09"/>
+</filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#33445E"/>
+</marker>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#355CFF"/>
+</marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#16885B"/>
+</marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#C94242"/>
+</marker>
+<marker id="arrow-orange" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#D97706"/>
+</marker>
+</defs>
+<rect x="0" y="0" width="1920" height="1080" rx="0" fill="#F4F7FB" stroke="none" stroke-width="1" opacity="1"/>
+<rect x="0" y="0" width="1920" height="12" rx="0" fill="url(#accent)" stroke="none" stroke-width="1" opacity="1"/>
+<text x="72" y="72" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="42" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">验证与证据总结</text>
+<text x="74" y="126" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="21" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">工程自动化、浏览器演示、Aily 人工验收与当前验证边界分开呈现</text>
+<rect x="1615" y="48" width="235" height="56" rx="28" fill="#10233F" stroke="none" stroke-width="1" opacity="1"/>
+<text x="1732" y="76" fill="#FFFFFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">TuneWise · 图 08</text>
+<line x1="72" y1="166" x2="1848" y2="166" stroke="#D7DEEA" stroke-width="2" stroke-linecap="round" opacity="1"/>
+<rect x="70" y="210" width="870" height="340" rx="18" fill="#FFFFFF" stroke="#CCD5E5" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="104" y="253" fill="#355CFF" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="28" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">A · 工程自动化验证</text>
+<rect x="625" y="234" width="275" height="38" rx="19" fill="#EDF1F6" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="762.5" y="253" fill="#33445E" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">当前全量</text>
+<line x1="104" y1="292" x2="906" y2="292" stroke="#D9E0EB" stroke-width="1.5" stroke-linecap="round" opacity="1"/>
+<rect x="980" y="210" width="870" height="340" rx="18" fill="#FFFFFF" stroke="#CCD5E5" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="1014" y="253" fill="#0C9A9A" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="28" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">B · Demo 浏览器验证</text>
+<rect x="1535" y="234" width="275" height="38" rx="19" fill="#EDF1F6" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1672.5" y="253" fill="#33445E" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">浏览器人工验收</text>
+<line x1="1014" y1="292" x2="1816" y2="292" stroke="#D9E0EB" stroke-width="1.5" stroke-linecap="round" opacity="1"/>
+<rect x="70" y="595" width="870" height="340" rx="18" fill="#FFFFFF" stroke="#CCD5E5" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="104" y="638" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="28" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">C · Aily 人工验收</text>
+<rect x="625" y="619" width="275" height="38" rx="19" fill="#EDF1F6" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="762.5" y="638" fill="#33445E" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">界面 / 对话验收</text>
+<line x1="104" y1="677" x2="906" y2="677" stroke="#D9E0EB" stroke-width="1.5" stroke-linecap="round" opacity="1"/>
+<rect x="980" y="595" width="870" height="340" rx="18" fill="#FFFFFF" stroke="#CCD5E5" stroke-width="1.5" opacity="1" filter="url(#shadow)"/>
+<text x="1014" y="638" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="28" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">D · 当前验证边界</text>
+<rect x="1535" y="619" width="275" height="38" rx="19" fill="#EDF1F6" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1672.5" y="638" fill="#33445E" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">事实边界</text>
+<line x1="1014" y1="677" x2="1816" y2="677" stroke="#D9E0EB" stroke-width="1.5" stroke-linecap="round" opacity="1"/>
+<text x="105" y="327" fill="#223D9A" font-family="Cascadia Mono, Consolas, Microsoft YaHei, monospace" font-size="23" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">当前全量验证 · 2026-08-11</text>
+<text x="105" y="378" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">Backend 全量</text>
+<rect x="410" y="359" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="525.0" y="378" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">454 / 454 PASS</text>
+<text x="105" y="427" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">Frontend 全量</text>
+<rect x="410" y="408" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="525.0" y="427" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">46 / 46 PASS</text>
+<text x="105" y="476" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">工程生成与事实硬门禁</text>
+<rect x="410" y="457" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="525.0" y="476" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<text x="105" y="522" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">历史 433 / 40 已降级为旧 commit 证据，不作为本图主验证数字</text>
+<text x="1015" y="332" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">固定 Demo 浏览器 QA</text>
+<rect x="1320" y="313" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1435.0" y="332" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<text x="1015" y="381" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">调机过程 Demo 浏览器验收</text>
+<rect x="1320" y="362" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1435.0" y="381" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<text x="1015" y="430" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">桌面端 / 移动端</text>
+<rect x="1320" y="411" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1435.0" y="430" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<text x="1015" y="479" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">固定 Demo 本地执行回读</text>
+<rect x="1320" y="460" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1435.0" y="479" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">0.200000</text>
+<text x="1015" y="522" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">Fixed Demo 与 Process-aware Demo 独立验收，不拼成生产案例</text>
+<text x="105" y="717" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">在线知识包（Live）</text>
+<rect x="410" y="698" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="525.0" y="717" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">8 / 8</text>
+<text x="105" y="766" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">原有安全硬门禁</text>
+<rect x="410" y="747" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="525.0" y="766" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<text x="105" y="815" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">调机过程问答</text>
+<rect x="410" y="796" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="525.0" y="815" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<text x="105" y="864" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">发布环境</text>
+<rect x="410" y="845" width="230" height="38" rx="19" fill="#E7F5EE" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="525.0" y="864" fill="#16885B" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">PASS</text>
+<text x="105" y="907" fill="#6F5CE7" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">Manual UI / conversational acceptance validation · 非自动 benchmark</text>
+<text x="1015" y="695" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">固定 Demo</text>
+<rect x="1300" y="676" width="250" height="38" rx="19" fill="#FFF1DF" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1425.0" y="695" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">SYNTHETIC</text>
+<text x="1015" y="738" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">Process-aware Demo</text>
+<rect x="1300" y="719" width="250" height="38" rx="19" fill="#FFF1DF" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1425.0" y="738" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">SYNTHETIC</text>
+<text x="1015" y="781" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">设备执行</text>
+<rect x="1300" y="762" width="250" height="38" rx="19" fill="#FFF1DF" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1425.0" y="781" fill="#D97706" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">LOCAL SANDBOX</text>
+<text x="1015" y="824" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">真实生产数据 / 业务效果</text>
+<rect x="1300" y="805" width="250" height="38" rx="19" fill="#FCEBEC" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1425.0" y="824" fill="#C94242" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">NOT VALIDATED</text>
+<text x="1015" y="867" fill="#10233F" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="19" font-weight="600" text-anchor="start" dominant-baseline="middle" opacity="1">公开真实数据边界审查</text>
+<rect x="1300" y="848" width="250" height="38" rx="19" fill="#FCEBEC" stroke="none" stroke-width="1.5" opacity="1"/>
+<text x="1425.0" y="867" fill="#C94242" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">NO-GO</text>
+<text x="1015" y="914" fill="#C94242" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="16.5" font-weight="700" text-anchor="start" dominant-baseline="middle" opacity="1">LOROS：真实 MTF / SFR / ROI 可追溯，但与 AA 调机语义不匹配</text>
+<rect x="70" y="965" width="1780" height="50" rx="14" fill="#EDF1F6" stroke="#D1D9E5" stroke-width="1" opacity="1"/>
+<text x="960" y="990" fill="#33445E" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="20" font-weight="700" text-anchor="middle" dominant-baseline="middle" opacity="1">证据类型必须随主张一起呈现：自动化验证 ≠ 人工验收 ≠ 合成演示 ≠ 真实生产验证</text>
+<text x="74" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="start" dominant-baseline="middle" opacity="1">公开真实数据审查 NO-GO 表示语义不匹配；不等于真实 AA 验证 PASS</text>
+<text x="1848" y="1040" fill="#5D6B82" font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="17" font-weight="400" text-anchor="end" dominant-baseline="middle" opacity="1">40 强最终参赛方案 · 2026-08-11</text>
+</svg>

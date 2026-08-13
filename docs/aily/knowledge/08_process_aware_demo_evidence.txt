@@ -1,0 +1,76 @@
+# TuneWise Process-aware Demo Evidence Addendum
+
+Evidence version: `tw-process-aware-demo-v1`
+Fixture version: `tw-process-aware-demo-fixture-v1`
+Source kind: `SYNTHETIC_TEST_FIXTURE`
+
+Process-aware Demo 是当前真实运行的软件功能；“真实运行”指版本化软件路径和确定性 A/B 输出可运行，不表示其中的 process context 或结果来自真实生产。
+
+## Shared Evidence
+
+- Same measurement evidence
+- Same 50-D query fingerprint
+- Same root-cause ranking
+- Measurement hash: `c74206387e06287d6c11ee8a4c6cc46cae867e6967f0c790f5dfe2f5ef940668`
+- Query feature hash: `7fa3c96138dbeb938466fcd12b00b2b8c1a9fcb61ee78dcad77f29a545462040`
+- Demo dataset asset: `tw-aa-demo-v1`
+- Query feature dimension: `50`
+- Top-3:
+  1. `PLANE_TILT`
+  2. `XY_DECENTER`
+  3. `REFERENCE_DRIFT`
+
+Process Context 不进入现有 `StandardScaler` 或 multinomial logistic regression classifier，不改变 Engineering Feature Contract、Root Cause labels、Top-3 或 50-D case distance definition，也不直接计算参数值。
+
+## Scenario A
+
+- Process stage: `INITIAL_ASSESSMENT`
+- Iteration context: `iteration_index = 0`
+- Previous action: None
+- Previous outcome: None
+- Eligible case: `tw-aa-approved-011`
+- Compatibility: `CONTEXT_MATCH`
+- `CASE_GUIDED`: pitch `-3` ticks
+- Supporting case IDs: `tw-aa-approved-011`
+- Validation status: `PASSED`
+
+## Scenario B
+
+- Process stage: `POST_ADJUSTMENT_EVALUATION`
+- Iteration context: `iteration_index = 1`
+- Previous action: pitch `0.250000 → 0.200000` (`-1` tick)
+- Previous outcome: `NO_MATERIAL_IMPROVEMENT`
+- Eligible case: `tw-aa-approved-003`
+- Compatibility: `CONTEXT_MATCH`
+- `CASE_GUIDED`: pitch `-4` ticks
+- Supporting case IDs: `tw-aa-approved-003`
+- Validation status: `PASSED`
+
+## Stable candidates and safety controls
+
+- `CONSERVATIVE`: pitch `-1` tick in both scenarios
+- `STANDARD`: pitch `-2` ticks in both scenarios
+- Safety Validator: `PASSED`
+- Safety rule version: `tw-parameter-safety-v1`
+
+这里的 legacy regression safety 仅指同一 measurement/query 下既有 classifier/Top-3、`CONSERVATIVE` / `STANDARD` candidates 与 `ParameterSafetyValidator` 结果保持不变，不表示完整生产安全或效果验证。
+
+The following contracts remain unchanged: Engineering Feature Contract, `StandardScaler`, multiclass Logistic Regression, Root Cause labels, 50-D case distance, `CONSERVATIVE` rule, `STANDARD` rule, `ParameterSafetyValidator`, Human Confirmation, `ConfirmedPlan`, Replay Engine, OPC-UA safety contract and Execution Receipt.
+
+Process Context can only indirectly change eligible historical cases, `CASE_GUIDED` availability, `CASE_GUIDED` supporting case IDs, `CASE_GUIDED` magnitude and explanation.
+
+## Core conclusion
+
+Same anomaly evidence + different process context can produce different eligible historical evidence and therefore different `CASE_GUIDED` recommendation while deterministic baseline candidates and safety validation remain unchanged.
+
+## Facts Boundary
+
+Synthetic process-context demonstration.
+Demonstrates deterministic context-sensitive evidence selection.
+Does not represent Sunny Optical SOP or validated production tuning accuracy.
+
+TuneWise process-context abstractions; not industry-standard states.
+
+`ProcessContext` and `CaseProcessProfile` use synthetic fixtures. `INITIAL_ASSESSMENT`, `POST_ADJUSTMENT_EVALUATION` and `NO_MATERIAL_IMPROVEMENT` are TuneWise abstractions, not industry-standard states and not Sunny Optical internal SOP. Current compatibility rules have not been validated with real enterprise process data. Pitch `-3` / `-4` ticks are synthetic demonstration outputs.
+
+This demo does not demonstrate real AA recommendation accuracy, real yield improvement, production tuning effectiveness, causal effectiveness or sequential optimization. Real production validation remains future Shadow Data / controlled validation work.

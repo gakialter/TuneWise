@@ -26,7 +26,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-tunewise = ["static/**/*", "migrations/*.sql"]
+tunewise = ["static/**/*", "process_aware_demo_static/**/*", "migrations/*.sql"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

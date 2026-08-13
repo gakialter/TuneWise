@@ -1,0 +1,65 @@
+# TuneWise 双层 AI 架构
+
+## 第一层：TuneWise Deterministic AI Core
+
+TuneWise 的底层决策核心是本地、离线、版本固定的确定性流水线：
+
+`SPC 规则 → 工程特征 → StandardScaler → multinomial logistic regression → 可选 Process Context 案例资格 → 现有 50-D 结构化 KNN 排序 → 确定性安全规则`
+
+当前运行期不调用 LLM，不依赖外部网络，不在线训练，也不增量学习。
+
+## Process-aware 案例资格层
+
+当前软件可在 Measurement / Diagnostic Evidence 之外接收可选 Process Context，例如当前处于 `INITIAL_ASSESSMENT` 还是 `POST_ADJUSTMENT_EVALUATION`、前一步调整了什么参数、结果如何以及迭代信息。该上下文先与案例的 `CaseProcessProfile` 做确定性兼容判断，只让符合条件的历史案例进入既有排序与 `CASE_GUIDED` 证据链。
+
+Process Context 当前首先作用于案例资格与解释，不进入现有 multinomial logistic regression classifier，不改变 `StandardScaler`、Engineering Feature Contract、根因 labels 或 Top-3 根因排序，也不直接计算参数值。案例获得资格后仍使用现有 50-D case distance 排序；参数方向、`CONSERVATIVE` / `STANDARD` 规则、`ParameterSafetyValidator`、人工确认、`ConfirmedPlan`、Replay engine、OPC-UA safety contract 和 Execution Receipt 均保持不变。
+
+因此 Process Context 只可能间接改变 eligible historical cases、`CASE_GUIDED` availability、supporting case IDs、`CASE_GUIDED` magnitude 与 explanation。当前 `ProcessContext` / `CaseProcessProfile` 来自 synthetic fixtures；状态名称是 TuneWise process-context abstractions，不是行业标准状态或舜宇内部 SOP，compatibility rules 尚未经过真实企业过程数据验证。当前实现不证明真实 AA 推荐准确率、真实良率提升、production tuning effectiveness、causal effectiveness 或 sequential optimization。
+
+## 数据输入与 SPC
+
+输入是版本化 CSV。固定 Demo `tw-aa-demo-v1` 包含 24 条 AA 观测；每条观测包含 sample index、带时区时间戳、五个调机参数、平台状态量和中心/四角 MTF。导入同时校验原始文件 SHA-256 和由 `tw-canonicalizer-v1` 生成的规范化观测 SHA-256。
+
+SPC 使用冻结控制限与持续性规则，不让单点噪声触发主流程。输出路由包括 `TARGET_ANOMALY`、`NORMAL`、`NON_TARGET_GLOBAL_DEGRADATION` 和 `INSUFFICIENT_DATA`。
+
+## 特征工程与模型
+
+`tw-feature-definition-v1` 固定定义 50 个特征。它们包括中心/四角 MTF、五个参数、振动、重复定位误差、X/Y 标定残差各自的 mean、population standard deviation 和线性 trend，以及 corner mean/min/range/std、左右差、上下差、对角差和中心-四角差。
+
+固定预处理器是 `StandardScaler`，版本为 `tw-preprocessing-v1`。根因模型是 `multinomial_logistic_regression`，使用确定性 full-batch gradient descent 生成，版本为 `tw-model-v1`。运行时按固定特征顺序执行纯 Python 推理。
+
+## 当前根因类别
+
+模型 class order 固定为：
+
+1. `PLANE_TILT`：平面 Pitch/Roll 倾斜，可调整。
+2. `XY_DECENTER`：X/Y 偏心，可调整。
+3. `PLATFORM_INSTABILITY`：平台不稳定，检查类。
+4. `REFERENCE_DRIFT`：参考/标定漂移，检查类。
+5. `Z_DEFOCUS_CONDITIONAL`：条件式 Z 向离焦，仅通过额外 Z gate 时可见并可调整。
+
+若 Z gate 不通过，`Z_DEFOCUS_CONDITIONAL` 会先被移出可见候选，再对其余类别的 softmax 输出重新归一化并排序。系统最终保存 Top-3。
+
+## score 的真实语义
+
+字段名是 `normalized_score`。它由固定 logistic regression 的 softmax 输出产生；Z gate 移除类别时会在可见类别上重新归一化。它只用于当前固定候选集合中的相对排序和证据门槛。
+
+**Score is not a calibrated fault probability.**
+
+不得把 `0.997781` 说成“99.7781% 的真实故障概率”“置信度”或现场发生率。模型没有以真实产线故障频率做概率校准。页面中的 logit contribution 是“标准化特征值 × 当前类别系数”，只解释该特征对该类别 raw logit 的正向贡献，不表示因果贡献。
+
+## 为什么根因模型不用 LLM
+
+- 输入是固定数值特征，类别和规则边界明确，适合可复现的分类排序。
+- 模型、Scaler、特征顺序、规则和 hash 可以冻结并审计。
+- 同一输入可稳定得到同一排序，便于比赛 Demo 和工程复核。
+- LLM 生成的自由文本或参数无法替代范围、tick、方向和版本门禁。
+- 当前数据是合成开发资产，模型定位是候选排序器，不应扩大为开放世界故障诊断器。
+
+可解释 ML 仍属于 AI/机器学习。TuneWise 使用 logistic regression 完成结构化根因排序，同时用规则与案例补充工程解释；是否使用大语言模型不是“算不算 AI”的判据。
+
+## 第二层：Feishu Aily Generative AI Collaboration Layer
+
+Aily V1 使用 Knowledge Space Retrieval 和 LLM，把版本化项目知识与固定 Demo Evidence 转成自然语言问答。它负责 Retrieval、Explanation、Project QA 和 Engineering Collaboration。
+
+Aily 不接收实时控制权限，不参与 SPC、特征计算、根因排序、方向判断、幅值计算、安全校验、人工确认、回放或设备执行。它是解释层，不是 TuneWise Deterministic AI Core，也不是安全关键控制链的一部分。

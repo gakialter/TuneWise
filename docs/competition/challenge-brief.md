@@ -25,3 +25,5 @@
 ## 当前方案定位
 
 TuneWise 是一个面向精密光学装调单一工站的 AI 调机决策支持原型。比赛阶段采用公开资料、规则约束模拟数据、CSV 批量导入和离线回放验证完整闭环，不声称已经接入舜宇真实产线，也不允许 AI 直接控制设备或替代工程人员。
+
+当前比赛版本采用双层 AI：TuneWise Deterministic AI Core 产生可验证的工业决策证据；已发布的飞书 Aily RAG Engineering Copilot 检索并解释版本化项目知识与固定 Demo Evidence。Aily 不实时读取 Core 运行状态，也没有参数生成、Replay 触发或设备写入权限。

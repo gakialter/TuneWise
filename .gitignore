@@ -17,3 +17,10 @@ coverage/
 .DS_Store
 Thumbs.db
 var/
+.scratch/
+~$*.docx
+
+# Local-only submission material and superseded screenshot notes
+docs/submission/40-final-form-fields.md
+docs/submission/assets/40-final/aily-screenshots/03_hero_qa.png.png
+docs/submission/assets/40-final/aily-screenshots/README.md

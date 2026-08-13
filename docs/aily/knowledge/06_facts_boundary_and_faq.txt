@@ -1,0 +1,103 @@
+# TuneWise 事实边界 FAQ
+
+## Q1：TuneWise 已经接入真实光学产线了吗？真实产线、生产线、真机、实机状态是什么？
+
+**No，尚未接入。** 当前未连接舜宇真实光学产线、MES、QMS、真实 PLC 或真实光学设备。仓库中的设备通道只连接固定 loopback 地址上的本地 OPC-UA sandbox 模拟设备。
+
+因此不得描述为“已经生产部署”“已经接入真机/实机”或“已完成真实设备安全验证”。
+
+## Q2：目前是否使用真实光学设备数据或真实生产数据？
+
+**No，当前固定 Demo 不使用真实数据。** 固定 Demo、模型开发分区与 `APPROVED` 案例均为公开知识和规则约束生成的 synthetic prototype data。
+
+仓库具备 `SHADOW_READ_ONLY` 的真实设备数据映射与分析契约，但当前只提交了标记为 `CONTRACT_FIXTURE` / `SYNTHETIC` 的自动化 fixture。`REAL_DEVICE_SHADOW_DECLARED` 也只表示操作者声明，不表示 TuneWise 已验证来源、授权或真实性。
+
+## Q3：模型 score 是真实故障概率、概率、置信度或“82%”吗？
+
+**No。** `normalized_score` 来自固定 multinomial logistic regression 的 softmax 输出；Z gate 移除类别时还会在当前可见候选上重新归一化。它只用于根因之间的相对排序和证据门槛。
+
+模型没有用真实产线故障频率做校准，因此不能把 `0.82` 写成“82% 故障概率”“82% 置信度”或真实发生率。Score is not a calibrated fault probability.
+
+## Q4：Simulation Validation (Replay) `SUCCESS` 是否证明真实良率、效果提升或生产收益？
+
+**No。** `SUCCESS` 只表示在固定模型、固定模拟场景、固定扰动、固定 seed 与固定评价规则下，结构化离线回放检查通过。
+
+它不证明真实产线良率提升、真机效果、生产收益、参数因果有效性或最优性。Replay result does not demonstrate production yield improvement.
+
+## Q5：Aily 能自己生成新的调机参数、改变方向或幅值吗？
+
+**No。** Aily 只检索和解释版本化知识及固定 Demo Evidence。方向由 TuneWise 固定工程规则决定；幅值来自固定 Conservative/Standard tick 规则或兼容 `APPROVED` cases 的中位数证据；候选还必须通过 `ParameterSafetyValidator`。
+
+Aily 不生成参数，不修改方向或幅值，不创建、选择或修改候选和 ConfirmedPlan。
+
+## Q6：Aily 能触发 OPC-UA 参数下发、Replay、SimulatorGateway 或 DeviceExecution 吗？
+
+**No。** Aily V1 没有 HTTP、Connector、MCP、Webhook 或设备控制集成。它不能触发 Replay、调用 SimulatorGateway、发起 DeviceExecution 或写 OPC-UA。
+
+Aily 不是控制授权方，也不在 TuneWise 安全关键执行路径中。
+
+## Q7：TuneWise 是不是让大语言模型控制设备？
+
+**No。** TuneWise 底层是本地确定性 AI Core：SPC、固定工程特征、StandardScaler、multinomial logistic regression、结构化 KNN 和确定性安全规则。运行期根因排序与荐参不调用 LLM。
+
+飞书 Aily 是 Generative AI Collaboration / Engineering Explanation Layer，只负责 Retrieval、Explanation 和 Project QA。
+
+## Q8：当前是否支持多参数同时自动执行？
+
+**No。** 规划安全策略可以表达同一参数族内最多两个调整参数，但当前 OPC-UA DeviceExecution 明确要求恰好一个实际变化参数；多参数方案以 `MULTI_PARAMETER_ATOMICITY_UNSUPPORTED` 整体拒绝。
+
+系统不做多节点部分写入、不声称多节点原子性，也不实现自动回滚。固定 Demo 实际只执行 `pitch` 一个参数。
+
+## Q9：当前 OPC-UA 使用的是真实生产安全环境吗？
+
+**No。** 当前仅为 `OPCUA_SANDBOX` / `LOCAL_ANONYMOUS_SANDBOX`，endpoint 固定在 `127.0.0.1:4841`。当前证据的 certificate fingerprint 为 `null`，不是生产证书或真实 OT 安全环境。
+
+虽然 sandbox 实现 server identity、只读 Variable、受控 Method、expected-before、执行锁、幂等记录和 readback，这些只证明本地模拟设备的受控语义，不代表真实 PLC 原子写、生产安全联锁或现场认证。
+
+## Q10：`UNKNOWN_OUTCOME` 会自动重试吗？
+
+**No。** `UNKNOWN_OUTCOME` 表示写入开始后结果不确定，它不等于明确失败，也不等于成功。系统不会自动再次写入。
+
+恢复只使用相同 idempotency key 做设备侧记录的只读 reconciliation。没有可信 execution evidence 时保持 `RECONCILIATION_REQUIRED`；即使当前值恰好等于 target，也不能据此猜测 `SUCCEEDED`。
+
+## Q11：Shadow Data 是否等同于专家标注真实数据或 expert ground truth？
+
+**No。** `ShadowEvidenceBundle` 是把 raw、mapping、canonical measurements、context、reviewed outcome、provenance、unit mapping 和 review contract 绑定在一起的只读证据包。
+
+当前声明式 review 最高只支持 `EVALUATED_DECLARED_REVIEW`，明确不是外部验证。仓库中的 `synthetic-contract-*` 仍是 synthetic contract fixture；不得称为专家标注真实数据、真实设备验证或专家一致率证据。
+
+## Q12：为什么还需要人工确认？
+
+**当前必须人工确认。** 根因模型只做候选相对排序，案例来自 synthetic development assets，回放也只是固定模拟环境；这些证据不足以授权真实设备控制。
+
+工程师需要确认候选是否符合当前上下文。确认后形成不可变 `ConfirmedPlan`，把候选、身份、时间、版本、快照和 hash 固定下来；Replay 和 sandbox DeviceExecution 还会分别重做 freshness 与 safety 门禁。人工确认是当前人在回路边界的一部分，不是可由 Aily 代替的步骤。
+
+## Q13：TuneWise 是否会根据调机步骤改变建议？
+
+**会影响案例引导证据，但不是改变 classifier。** 可选 Process Context 会记录当前阶段、previous action、previous outcome 与 iteration context，并通过确定性 compatibility rules 改变哪些历史案例有资格作为证据。有资格的案例再使用现有 50-D distance 排序，因此可能改变 `CASE_GUIDED` availability、supporting case IDs、幅值与解释。
+
+Process Context 不进入现有 multinomial logistic regression，不改变 `StandardScaler`、Engineering Feature Contract、Root Cause labels 或 Top-3，也不直接计算参数值。
+
+## Q14：Process Context 是否来自舜宇真实产线？
+
+**当前不是。** Process-aware Demo 使用 synthetic process-context fixtures；其结构参考公开 AA 工程中的阶段化/迭代式测量与调整思想，但不代表舜宇内部 SOP。`ProcessContext`、`CaseProcessProfile` 与当前 compatibility rules 尚未经过真实企业过程数据验证。
+
+## Q15：为什么相同 `PLANE_TILT` 会出现不同 `CASE_GUIDED`？
+
+因为两种情景的 measurement evidence、同一 50-D query fingerprint 和 Top-3 root-cause evidence 相同，但 process stage、previous action、previous outcome 与 iteration context 不同。适用历史案例因此不同：Scenario A 使用 `tw-aa-approved-011`，Scenario B 使用 `tw-aa-approved-003`，对应 synthetic `CASE_GUIDED` 分别为 pitch `-3` 与 `-4` ticks。
+
+这不是 classifier 输出变化，也不是证明哪一个参数在真实设备上更有效。
+
+## Q16：`NO_MATERIAL_IMPROVEMENT` 是 AA 行业标准状态吗？
+
+**不是。** 它是 TuneWise 为 deterministic process-context demonstration 定义的 evaluation abstraction。`INITIAL_ASSESSMENT` 与 `POST_ADJUSTMENT_EVALUATION` 同样是 TuneWise process-context abstractions；这些名称不是行业标准状态。
+
+## Q17：Process Context 会不会绕过安全规则？
+
+**不会。** Process Context 只作用于案例资格与解释。现有方向规则、`CONSERVATIVE` / `STANDARD`、`ParameterSafetyValidator`、人工确认、`ConfirmedPlan`、Simulation Validation、OPC-UA safety contract 和 Execution Receipt 均保持不变。
+
+## Q18：Process-aware 功能是否证明真实调机更准确？
+
+**不证明。** 当前验证证明的是 deterministic context-sensitive evidence selection 和 legacy regression safety：相同测量/诊断证据下，不同 synthetic process context 可以稳定改变 eligible case 与 `CASE_GUIDED`，同时既有 classifier/Top-3、`CONSERVATIVE` / `STANDARD` candidates 和 `ParameterSafetyValidator` 结果保持不变。这里的 legacy regression safety 只指这些明确的不变量，不表示完整生产安全或效果验证。
+
+它不证明真实 AA 推荐准确率、真实良率提升、production tuning effectiveness、causal effectiveness 或 sequential optimization。真实生产验证仍属于后续 Shadow Data / controlled validation。

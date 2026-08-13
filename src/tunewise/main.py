@@ -22,6 +22,9 @@ EXPECTED_PLANNING_MANIFEST_HASH = (
 EXPECTED_REPLAY_MANIFEST_HASH = (
     "8d4b3582e9509bf0a1b1b1aa44a0d43fbbd5972f8ab0fe497dcd5712a4ee8824"
 )
+EXPECTED_PROCESS_AWARE_DEMO_MANIFEST_HASH = (
+    "a64b508a690ded5a0aa586789949059c1020144cf4688293877179925a57baf4"
+)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -47,6 +50,15 @@ def create_production_app(repository_root: Path = REPOSITORY_ROOT):
         expected_planning_manifest_hash=EXPECTED_PLANNING_MANIFEST_HASH,
         replay_asset_root=repository_root / "assets" / "simulator-private" / "tw-replay-simulator-v1",
         expected_replay_manifest_hash=EXPECTED_REPLAY_MANIFEST_HASH,
+        process_aware_demo_asset_root=(
+            repository_root / "assets" / "demo" / "tw-process-aware-demo-v1"
+        ),
+        expected_process_aware_demo_manifest_hash=(
+            EXPECTED_PROCESS_AWARE_DEMO_MANIFEST_HASH
+        ),
+        process_aware_demo_static_root=(
+            repository_root / "src" / "tunewise" / "process_aware_demo_static"
+        ),
     )
 
 

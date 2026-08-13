@@ -837,6 +837,7 @@ class StructuredCaseRetriever:
         product_model: str,
         top3_root_causes: tuple[str, ...],
         top_k: int,
+        eligible_case_ids: frozenset[str] | None = None,
     ) -> CaseRetrievalDecision:
         if top_k < 1 or top_k > 5:
             raise CaseRetrievalGuardError(
@@ -891,6 +892,10 @@ class StructuredCaseRetriever:
                 continue
             if (
                 case.case_id not in indexed_ids
+                or (
+                    eligible_case_ids is not None
+                    and case.case_id not in eligible_case_ids
+                )
                 or case.station_type != STATION_TYPE
                 or case.product_model not in compatible_products
                 or case.source_partition != SOURCE_PARTITION
